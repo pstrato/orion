@@ -37,7 +37,7 @@ def var(
     unit: Unit,
     value: jnp.ndarray | float | int | list[float] | list[int] | None = None,
     description: str = "",
-    constraint: Constraint[Variable] | None = None,
+    constraint: Constraint | None = None,
     axes: tuple[Axis, ...] = (),
 ) -> Variable:
     """Create a variable quantity."""

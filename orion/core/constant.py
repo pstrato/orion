@@ -23,7 +23,7 @@ def const[T](
     unit: Unit,
     value: T,
     description: str = "",
-    constraint: Constraint[Constant[T]] | None = None,
+    constraint: Constraint | None = None,
     axes: tuple[Axis, ...] = (),
 ) -> Constant[T]:
     """Create a constant quantity."""
