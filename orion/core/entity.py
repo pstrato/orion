@@ -6,7 +6,7 @@ import types
 from annotationlib import Format
 from collections.abc import Callable
 from dataclasses import dataclass, fields
-from typing import Any, ClassVar, TypeVar, Union, dataclass_transform, get_args, get_origin, get_type_hints
+from typing import Any, ClassVar, Iterable, TypeVar, Union, dataclass_transform, get_args, get_origin, get_type_hints
 
 from jax.tree_util import register_dataclass
 
@@ -85,12 +85,31 @@ class Entity:
             return
         dataclass(frozen=True)(cls)
 
+    def direct_entities(self) -> Iterable[tuple[EntityRelation, Entity]]:
+        """Direct entities of this entity."""
+        for f in fields(self):
+            value = getattr(self, f.name)
+            if isinstance(value, tuple):
+                for i, item in enumerate(value):
+                    if not isinstance(item, Entity):
+                        continue
+                    yield EntityRelation(f.name, index=i), item
+            elif isinstance(value, Entity):
+                yield EntityRelation(f.name), value
+
+    def all_entities(self, hierarchy: tuple[EntityRelation, ...] = (), of_type: type | tuple[type, ...] | None = None) -> Iterable[tuple[EntityPath, Entity]]:
+        """All entities, including self."""
+        if of_type is None or isinstance(self, of_type):
+            yield hierarchy, self
+        for relation, entity in self.direct_entities():
+            yield from entity.all_entities((*hierarchy, relation), of_type)
+
 
 T = TypeVar("T", bound=Entity)
 
 
 @dataclass_transform(frozen_default=True)
-def entity(cls: type[T] | None = None, **_unused: object) -> type[T] | Callable[[type[T]], type[T]]:
+def entity(cls: type[T] | None = None) -> type[T] | Callable[[type[T]], type[T]]:
     """Register an immutable Entity subclass as a JAX pytree.
 
     Data vs meta roles are discovered from dataclass field types.
@@ -111,3 +130,19 @@ def entity(cls: type[T] | None = None, **_unused: object) -> type[T] | Callable[
     if cls is not None:
         return decorator(cls)
     return decorator
+
+
+@entity()
+class EntityRelation(Entity):
+    """Relation between a parent entity and a child."""
+
+    index: int | None = None
+    """Child index if from a tuple relation."""
+
+    def __str__(self) -> str:
+        if self.index is None:
+            return self.name
+        return f"{self.name}[{self.index}]"
+
+
+EntityPath = tuple[EntityRelation, ...]
