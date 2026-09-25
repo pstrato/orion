@@ -28,8 +28,9 @@ from orion.ui.configuration import Configuration, default_configuration
 from orion.ui.configuration_tab import render_configuration_tab
 from orion.ui.fetch_status import FetchProgress, discard_fetch_progress, fetch_progress, latest_fetch_progress
 from orion.ui.preferences import UiPreferences, load_preferences, merge_plot_order, save_preferences
+from orion.ui.entity_editor import render_entity_values
 from orion.ui.process_tab import render_process_tab
-from orion.ui.reflect import apply_quantity_edits
+from orion.ui.reflect import apply_quantity_edits, set_entity_value
 from orion.ui.results_data import list_plot_keys
 from orion.ui.run_status import RunTiming, collect_timing, format_done_status, timed
 from orion.ui.runs import (
@@ -56,11 +57,43 @@ CACHE_PATH = Path(__file__).resolve().parents[2] / "cache"
 DEFAULT_YEAR = 2024
 
 
+def ui_settings(**overrides: object) -> Settings:
+    """A ``Settings`` entity filled from its fields, so new fields appear without a form rewrite."""
+    from dataclasses import MISSING
+    from dataclasses import fields as dataclass_fields
+
+    values: dict[str, object] = {"name": "orion ui"}
+    for item in dataclass_fields(Settings):
+        if item.name == "name" or item.name in overrides:
+            continue
+        if item.default is not MISSING or item.default_factory is not MISSING:  # type: ignore[misc]
+            continue
+        values[item.name] = _blank_setting(item.type)
+    values.update(overrides)
+    return Settings(**values)  # type: ignore[arg-type]
+
+
+def _blank_setting(annotation: object) -> object:
+    if annotation in {Path, "Path"}:
+        return CACHE_PATH
+    if annotation in {bool, "bool"}:
+        return False
+    if annotation in {str, "str"}:
+        return ""
+    if annotation in {int, "int"}:
+        return 0
+    if annotation in {float, "float"}:
+        return 0.0
+    if annotation in {date, "date"}:
+        return date(DEFAULT_YEAR, 1, 1)
+    raise TypeError(f"No UI default for settings field of type {annotation!r}.")
+
+
 @dataclass
 class AppState:
     """Mutable UI session state."""
 
-    cache_path: Path = field(default_factory=lambda: CACHE_PATH)
+    settings: Settings = field(default_factory=ui_settings)
     latitude: float = 51.5
     longitude: float = 0.1
     location_name: str = "field"
@@ -77,6 +110,14 @@ class AppState:
     prefs: UiPreferences = field(default_factory=load_preferences)
     compile_cache: ConfigurationCompileCache = field(default_factory=ConfigurationCompileCache)
     warm_models: WarmModelCache = field(default_factory=WarmModelCache)
+
+    @property
+    def cache_path(self) -> Path:
+        return Path(self.settings.cache_path)
+
+    @cache_path.setter
+    def cache_path(self, value: Path) -> None:
+        self.settings = replace(self.settings, cache_path=Path(value))
 
 
 def build_inputs(state: AppState, configuration: Configuration) -> Inputs:
@@ -142,14 +183,7 @@ def build_model(state: AppState, configuration: Configuration, site_year: Any | 
         from orion.datasets.inputs import inputs_for_site_year
 
         inputs = inputs_for_site_year(template, site_year)
-    settings = Settings(
-        name="orion ui",
-        cache_path=state.cache_path,
-        validate_inputs=False,
-        validate_initial_states=False,
-        validate_simulation_states=False,
-    )
-    return model(configuration.name, inputs, settings)
+    return model(configuration.name, inputs, state.settings)
 
 
 def _step_count(built: Model) -> int:
@@ -205,8 +239,11 @@ def _render_settings_tab(state: AppState, host, on_prefs_changed: Callable[[UiPr
     def render() -> None:
         host.clear()
         with host:
-            with setting_row("Cache location", wide=True):
-                cache_input = ui.input(value=str(state.cache_path)).props("dense")
+
+            def on_setting(path: str, value: object) -> None:
+                state.settings = set_entity_value(state.settings, path, value)
+
+            render_entity_values(state.settings, on_setting)
 
             ui.label("Display units").classes("text-subtitle2 font-medium").tooltip("Internal quantities stay SI; choose agronomic alternatives for tables and plots.")
             selectors: dict[str, Any] = {}
@@ -219,7 +256,6 @@ def _render_settings_tab(state: AppState, host, on_prefs_changed: Callable[[UiPr
                     selectors[canonical] = ui.select(choices, value=current).props("dense options-dense")
 
             def save_settings() -> None:
-                state.cache_path = Path(str(cache_input.value))
                 chosen = {canonical: str(selector.value) for canonical, selector in selectors.items()}
                 state.prefs.unit_alternatives = resolve_unit_alternatives(chosen)
                 save_preferences(state.prefs)

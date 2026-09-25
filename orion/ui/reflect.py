@@ -6,9 +6,12 @@ Inputs are editable, including their ``Constant`` values.
 
 from __future__ import annotations
 
+import ast
+import inspect
 from collections.abc import Iterable
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, fields, replace
 from datetime import date
+from pathlib import Path
 from typing import TypeVar, cast
 
 import jax.numpy as jnp
@@ -183,6 +186,125 @@ def list_input_fields(inp: Entity) -> tuple[InputField, ...]:
 
 def input_field_label(name: str) -> str:
     return name.replace("_", " ").replace(".", " ")
+
+
+@dataclass(frozen=True)
+class EntityValue:
+    """One scalar value on an entity, discovered from ``all_entities``."""
+
+    path: str
+    name: str
+    value: object
+    kind: str
+    description: str
+
+
+def list_entity_values(root: Entity) -> tuple[EntityValue, ...]:
+    """Scalar fields on ``root`` and every nested entity.
+
+    Nested entities come from ``direct_entities`` via ``all_entities``.
+    Quantities and states are not listed here; they have their own editors.
+    """
+    if isinstance(root, State):
+        raise TypeError("States are read-only in the UI. Edit the Input that creates them, including constants.")
+    found: list[EntityValue] = []
+    for hierarchy, node in root.all_entities():
+        if isinstance(node, (State, Quantity, Constraint, Axis)):
+            continue
+        prefix = format_path(hierarchy)
+        docs = _field_docs(type(node))
+        for field in fields(node):
+            if field.name == "name":
+                continue
+            current = getattr(node, field.name)
+            if isinstance(current, Entity) or _is_entity_tuple(current):
+                continue
+            kind = _scalar_kind(current)
+            if kind is None:
+                continue
+            path = f"{prefix}.{field.name}" if prefix else field.name
+            found.append(EntityValue(path=path, name=field.name, value=current, kind=kind, description=docs.get(field.name, "")))
+    return tuple(found)
+
+
+def set_entity_value(root: T, path: str, value: object) -> T:
+    """Return a copy of ``root`` with one discovered scalar replaced."""
+    if isinstance(root, State):
+        raise TypeError("States are read-only in the UI. Edit the Input that creates them, including constants.")
+    return cast(T, _replace_scalar(root, path.split("."), value))
+
+
+def _replace_scalar(entity: Entity, parts: list[str], value: object) -> Entity:
+    if not parts:
+        return entity
+    head, *rest = parts
+    try:
+        current = getattr(entity, head)
+    except AttributeError:
+        raise KeyError(head) from None
+    if rest:
+        if isinstance(current, State):
+            raise TypeError("States are read-only in the UI. Edit the Input that creates them, including constants.")
+        if not isinstance(current, Entity):
+            raise KeyError(head)
+        return replace(entity, **{head: _replace_scalar(current, rest, value)})
+    return replace(entity, **{head: _coerce_like(current, value)})
+
+
+def _is_entity_tuple(value: object) -> bool:
+    return isinstance(value, tuple) and bool(value) and all(isinstance(item, Entity) for item in value)
+
+
+def _scalar_kind(value: object) -> str | None:
+    if isinstance(value, bool):
+        return "bool"
+    if isinstance(value, Path):
+        return "path"
+    if isinstance(value, str):
+        return "str"
+    if isinstance(value, int):
+        return "int"
+    if isinstance(value, float):
+        return "float"
+    if isinstance(value, date):
+        return "date"
+    return None
+
+
+def _coerce_like(current: object, value: object) -> object:
+    if isinstance(current, bool):
+        return bool(value)
+    if isinstance(current, Path):
+        return Path(str(value))
+    if isinstance(current, int):
+        return int(value)  # type: ignore[arg-type]
+    if isinstance(current, float):
+        return float(value)  # type: ignore[arg-type]
+    if isinstance(current, date):
+        return value if isinstance(value, date) else date.fromisoformat(str(value))
+    return value
+
+
+def _field_docs(cls: type) -> dict[str, str]:
+    """Attribute docstrings declared on ``cls`` and its bases."""
+    docs: dict[str, str] = {}
+    for base in reversed(cls.__mro__):
+        try:
+            source = inspect.getsource(base)
+            tree = ast.parse(source)
+        except OSError, TypeError, SyntaxError:
+            continue
+        class_node = next((node for node in ast.walk(tree) if isinstance(node, ast.ClassDef) and node.name == base.__name__), None)
+        if class_node is None:
+            continue
+        body = class_node.body
+        for index, stmt in enumerate(body):
+            if not isinstance(stmt, ast.AnnAssign) or not isinstance(stmt.target, ast.Name):
+                continue
+            following = body[index + 1] if index + 1 < len(body) else None
+            if isinstance(following, ast.Expr) and isinstance(following.value, ast.Constant) and isinstance(following.value.value, str):
+                docs[stmt.target.id] = following.value.value.strip()
+    return docs
 
 
 def run_steps(model: Model, steps: int) -> tuple[Model, Model]:

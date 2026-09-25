@@ -30,6 +30,9 @@ def test_settings_tab_keeps_each_control_beside_its_name():
 
     source = inspect.getsource(_render_settings_tab)
     assert "setting_row" in source
+    assert "render_entity_values" in source
+    assert "validate_inputs" not in source
+    assert "Cache location" not in source
     assert '.classes("w-full")' not in source
 
 
