@@ -73,9 +73,7 @@ def test_configuration_tab_lists_process_inputs_then_edits_the_selected_one():
 
 def test_build_inputs_keeps_clock_delta_editable(tmp_path):
     from orion.processes.clock import ClockInput
-    from orion.ui.app import AppState, build_inputs
-
-    from orion.ui.app import ui_settings
+    from orion.ui.app import AppState, build_inputs, ui_settings
 
     built = build_inputs(AppState(settings=ui_settings(cache_path=tmp_path), step_hours=3), default_configuration().with_parameter("clock", "delta", 6))
     clock = next(entity for _path, entity in built.all_entities() if isinstance(entity, ClockInput))

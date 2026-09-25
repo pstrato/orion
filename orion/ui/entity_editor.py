@@ -6,10 +6,9 @@ States are read-only. Configuration and the process lab both use this editor.
 from __future__ import annotations
 
 from collections.abc import Callable
+from datetime import date
 
 from nicegui import ui
-
-from datetime import date
 
 from orion.core.entity import Entity
 from orion.ui.reflect import EntityValue, InputField, input_field_label, list_entity_values, list_input_fields
@@ -62,43 +61,45 @@ def render_entity_values(entity: Entity, on_change: Callable[[str, object], None
 
 def _render_entity_value(item: EntityValue, on_change: Callable[[str, object], None]) -> None:
     with setting_row(input_field_label(item.path), wide=item.kind == "path"):
-        if item.kind == "bool":
-            box = ui.switch(value=bool(item.value)).props("dense")
-        elif item.kind == "int":
-            box = ui.number(value=float(item.value), format="%.0f", step=1).props("dense")  # type: ignore[arg-type]
-        elif item.kind == "float":
-            box = ui.number(value=float(item.value), format="%.4g").props("dense")  # type: ignore[arg-type]
-        elif item.kind == "date":
-            shown = item.value.isoformat() if isinstance(item.value, date) else str(item.value)
-            box = ui.input(value=shown).props("dense type=date")
-        else:
-            box = ui.input(value=str(item.value)).props("dense")
+        box = _entity_value_box(item)
         if item.description:
             box.tooltip(item.description)
 
         def commit(_=None, path: str = item.path, kind: str = item.kind, current: object = item.value) -> None:
-            raw = box.value
-            if kind == "bool":
-                next_value: object = bool(raw)
-            elif kind == "int":
-                if raw is None:
-                    return
-                next_value = int(raw)
-            elif kind == "float":
-                if raw is None:
-                    return
-                next_value = float(raw)
-            elif kind == "date":
-                if not raw:
-                    return
-                next_value = date.fromisoformat(str(raw))
-            else:
-                next_value = "" if raw is None else str(raw)
-            if next_value != current:
-                on_change(path, next_value)
+            next_value = _read_entity_value(kind, box.value)
+            if next_value is None or next_value == current:
+                return
+            on_change(path, next_value)
 
         if item.kind == "bool":
             box.on_value_change(commit)
         else:
             box.on("blur", commit)
             box.on("keydown.enter", commit)
+
+
+def _entity_value_box(item: EntityValue):
+    if item.kind == "bool":
+        return ui.switch(value=bool(item.value)).props("dense")
+    if item.kind == "int":
+        return ui.number(value=float(item.value), format="%.0f", step=1).props("dense")  # type: ignore[arg-type]
+    if item.kind == "float":
+        return ui.number(value=float(item.value), format="%.4g").props("dense")  # type: ignore[arg-type]
+    if item.kind == "date":
+        shown = item.value.isoformat() if isinstance(item.value, date) else str(item.value)
+        return ui.input(value=shown).props("dense type=date")
+    return ui.input(value=str(item.value)).props("dense")
+
+
+def _read_entity_value(kind: str, raw: object) -> object | None:
+    if kind == "bool":
+        return bool(raw)
+    if kind in {"int", "float"}:
+        if raw is None:
+            return None
+        return int(raw) if kind == "int" else float(raw)  # type: ignore[arg-type]
+    if kind == "date":
+        if not raw:
+            return None
+        return date.fromisoformat(str(raw))
+    return "" if raw is None else str(raw)

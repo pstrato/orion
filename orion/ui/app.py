@@ -26,9 +26,9 @@ from orion.processes.clock import ClockInput
 from orion.ui.catalog import configured_process_inputs, make_clock_input, unimplemented_process_labels
 from orion.ui.configuration import Configuration, default_configuration
 from orion.ui.configuration_tab import render_configuration_tab
+from orion.ui.entity_editor import render_entity_values
 from orion.ui.fetch_status import FetchProgress, discard_fetch_progress, fetch_progress, latest_fetch_progress
 from orion.ui.preferences import UiPreferences, load_preferences, merge_plot_order, save_preferences
-from orion.ui.entity_editor import render_entity_values
 from orion.ui.process_tab import render_process_tab
 from orion.ui.reflect import apply_quantity_edits, set_entity_value
 from orion.ui.results_data import list_plot_keys

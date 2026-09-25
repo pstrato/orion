@@ -5,8 +5,7 @@ from __future__ import annotations
 from dataclasses import fields
 from pathlib import Path
 
-from orion.core.entity import entity
-from orion.core.entity import Entity
+from orion.core.entity import Entity, entity
 from orion.core.setting import Settings
 from orion.ui.app import build_model, ui_settings
 from orion.ui.configuration import default_configuration
