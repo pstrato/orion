@@ -24,12 +24,6 @@ from orion.core.process import Process
 from orion.core.state import State
 
 
-class Argument(NamedTuple):
-    """Index of one ``step`` argument in the model state tuple."""
-
-    state_index: int
-
-
 class Assignment(NamedTuple):
     """Indexes written by one ``step`` result, in return-signature order.
 
@@ -47,18 +41,18 @@ def invoke(method: Callable[..., Any], available: Mapping[type, Any]) -> Any:
     return method(*positional, **keyword)
 
 
-def process_argument_slots(process: Process, inputs: Sequence[Input], states: Mapping[type[State], State], *extras: object) -> tuple[Argument, ...]:
+def process_argument_slots(process: Process, inputs: Sequence[Input], states: Mapping[type[State], State], *extras: object) -> tuple[int, ...]:
     """Plan ``process.step`` arguments as indexes into the state tuple."""
     available = _index([*extras, *inputs, *states.values()])
     state_index = {cls: index for index, cls in enumerate(states)}
-    slots: list[Argument] = []
+    slots: list[int] = []
     for value in _bound_values(process.step, available):
         concrete = type(value)
         try:
             index = state_index[concrete]
         except KeyError:
             raise TypeError(f"{_method_name(process.step)} argument {concrete.__name__} is not a state.") from None
-        slots.append(Argument(index))
+        slots.append(index)
     return tuple(slots)
 
 

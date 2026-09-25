@@ -8,7 +8,7 @@ from typing import cast
 
 from orion.core.entity import Entity, entity
 from orion.core.input import Input, Inputs
-from orion.core.invoke import Argument, Assignment, invoke_input_processes, invoke_input_states, process_argument_slots, process_assignment
+from orion.core.invoke import Assignment, invoke_input_processes, invoke_input_states, process_argument_slots, process_assignment
 from orion.core.process import Process
 from orion.core.setting import Settings
 from orion.core.state import State
@@ -65,7 +65,7 @@ class Model(Entity):
     state_index: Mapping[type[State], int]
     """Index of each concrete state type in ``states``."""
 
-    process_arguments: tuple[tuple[Argument, ...], ...]
+    process_arguments: tuple[tuple[int, ...], ...]
     """State indexes passed to each process, aligned with ``processes``."""
 
     process_assignments: tuple[Assignment, ...]
@@ -75,7 +75,7 @@ class Model(Entity):
         """Run every process once, reading and writing the state tuple by planned indexes."""
         states = list(self.states)
         for process, arguments, assignment in zip(self.processes, self.process_arguments, self.process_assignments, strict=True):
-            call = cast(tuple[Input | State, ...], tuple(states[argument.state_index] for argument in arguments))
+            call = cast(tuple[Input | State, ...], tuple(states[index] for index in arguments))
             _write(states, assignment, process.step(*call))
         return Model(
             name=self.name,

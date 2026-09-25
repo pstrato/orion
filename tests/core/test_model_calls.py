@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from orion.core.input import Input, Inputs
-from orion.core.invoke import Argument, Assignment
+from orion.core.invoke import Assignment
 from orion.core.model import model
 from orion.core.process import Process
 from orion.core.setting import Settings
@@ -97,8 +97,8 @@ def test_processes_run_in_creation_order_and_state_positions_stay_fixed():
     built = _model(Inputs("run", (ClockInput("clock-input"), ReadingInput("reading-input"))))
     assert [type(state) for state in built.states] == [Clock, Reading]
     assert [type(process) for process in built.processes] == [Tick, Tock]
-    assert built.process_arguments[0] == (Argument(0),)
-    assert built.process_arguments[1] == (Argument(0), Argument(1))
+    assert built.process_arguments[0] == (0,)
+    assert built.process_arguments[1] == (0, 1)
 
     stepped = built.step()
     assert stepped is not built
