@@ -1,0 +1,23 @@
+---
+description: Enforce Black (line 250), Ruff, and Pylance/Pyright after every code change
+alwaysApply: true
+---
+
+# Formatting and verification
+
+## Black
+
+- Format all Python with **Black**, `line-length = 250`.
+- After editing Python, run Black on touched files (or the package) before finishing.
+- Do not hand-reflow to a shorter width; Black is the source of truth.
+
+## Verify after every code change
+
+Before considering a coding task done, run all of:
+
+1. `uv run black orion tests` (or the files you changed)
+2. `uv run ruff check orion tests` — fix all findings
+3. `uv run pyright` — Pylance uses Pyright; fix all reported type errors/warnings
+4. `uv run pytest tests/core tests/ui -q` when behaviour might be affected
+
+Do not leave the tree with Black diffs, Ruff findings, Pyright/Pylance diagnostics, or failing tests.

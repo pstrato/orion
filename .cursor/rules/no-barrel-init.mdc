@@ -1,0 +1,17 @@
+---
+description: Do not add __init__.py files that only re-export names
+alwaysApply: true
+---
+
+# Package init files
+
+Most directories do not need an `__init__.py`. Import the module that defines the name.
+
+```python
+from orion.datasets.events import FertiliserEvent
+from orion.datasets.wheat import list_wheat_site_years
+```
+
+Do not add an `__init__.py` whose job is to list submodules or symbols with `__all__` and `_LAZY_EXPORTS`, or to eagerly re-export those names so callers can import them from the package.
+
+Add an `__init__.py` only when the package must run code on import.

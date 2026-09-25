@@ -1,0 +1,24 @@
+---
+description: Prefer TDD — test observable behaviour, not implementation details
+alwaysApply: true
+---
+
+# Test-driven development
+
+Write or update tests **before** (or as the driver for) production code changes.
+
+## What to test
+
+- Observable **behaviour** and contracts: inputs → outputs, user-visible results, invariants, error cases.
+- Discoverability: a UI or API built by introspection should still work when new processes/states appear, without rewriting the test around private helpers.
+
+## What not to test
+
+- Private helpers, call order, exact class structure, or incidental formatting unless that formatting is part of the product contract.
+- Framework wiring (NiceGUI widget trees, mock internals) when a higher-level behavioural check covers the same outcome.
+
+## Style
+
+- Name tests after the behaviour (`test_simulation_history_exposes_clock_step_series`), not after methods (`test_inspect_process`).
+- Prefer the smallest real fixture that exhibits the behaviour (e.g. clock-only model) over mocks of collaborators.
+- One behaviour per test; assert outcomes, not how they were computed.

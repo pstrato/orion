@@ -1,0 +1,14 @@
+---
+description: Place tests beside the package they test, not under tests/orion
+alwaysApply: true
+---
+
+# Test location
+
+Put each test in `tests/<package>/`, where `<package>` is the Orion package under test.
+
+- `orion/core/invoke.py` → `tests/core/test_invoke.py`
+- `orion/clients/openmeteo.py` → `tests/clients/test_openmeteo.py`
+- `orion/ui/configuration.py` → `tests/ui/test_configuration_tab.py`
+
+`tests/orion/` is not a test root.
