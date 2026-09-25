@@ -10,7 +10,7 @@ from jax.lax import dynamic_slice
 from orion.clients.http_cache import cached_session
 from orion.core.axis import WITHIN_STEP
 from orion.core.entity import entity
-from orion.core.input import Input, Inputs, LocationInput
+from orion.core.input import Input, LocationInput
 from orion.core.process import Process
 from orion.core.quantity import is_finite, is_non_negative
 from orion.core.setting import Settings
@@ -112,16 +112,13 @@ class OpenMeteoWeatherInput(Input):
             ),
         )
 
-    def processes(self, inputs: Inputs, location: LocationInput, clock: ClockInput):
-        series = fetch_openmeteo_hourly(location, clock, inputs.settings, openmeteo_requests.Client())
-        ts = jnp.stack([s[0] for s in series], axis=0)
-        ps = jnp.stack([s[1] for s in series], axis=0)
-        rs = jnp.stack([s[2] for s in series], axis=0)
+    def processes(self, settings: Settings, location: LocationInput, clock: ClockInput):
+        temperature, precipitation, radiation = fetch_openmeteo_hourly(location, clock, settings, openmeteo_requests.Client())
         return OpenMeteoWeatherProcess(
             name="OpenMeteoWeather",
-            Ts=ts,
-            Ps=ps,
-            Rs=rs,
+            Ts=jnp.reshape(temperature, (1, -1)),
+            Ps=jnp.reshape(precipitation, (1, -1)),
+            Rs=jnp.reshape(radiation, (1, -1)),
             delta=clock.delta.value,
         )
 

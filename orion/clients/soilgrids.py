@@ -6,6 +6,7 @@ from orion.clients.http_cache import cached_session
 from orion.core.entity import entity
 from orion.core.input import Input, Inputs, LocationInput
 from orion.core.process import Process
+from orion.core.setting import Settings
 from orion.datasets.convert import to_kg_per_kg, to_kg_per_m3
 from orion.processes.soil.soil import Soil, SoilLayer, make_soil_layer
 
@@ -160,13 +161,13 @@ def _resample_layers(per_depth: list[dict[str, float]]) -> list[tuple[float, flo
 class SoilGridInput(Input):
     """Creates a Soil state from SoilGrids at each location sample point."""
 
-    def states(self, inputs: Inputs, location: LocationInput):
+    def states(self, settings: Settings, location: LocationInput):
         """Build a Soil state from a SoilGrids properties query payload.
 
         Intervals down to 30 cm are kept; below that, properties are thickness-weighted onto 15 cm layers with a 20 cm base.
         """
-        cache = str(inputs.settings.cache_path)
-        payload = fetch_soilgrids(float(location.geometry.value.y), float(location.geometry.value.x), cache_path=cache)
+        cache = str(settings.cache_path)
+        payload = fetch_soilgrids(float(location.geometry.value.x), float(location.geometry.value.y), cache_path=cache)
         resampled = _resample_layers(_layer_values(payload))
         layers: list[SoilLayer] = []
         for i, (top, bottom, props) in enumerate(resampled):

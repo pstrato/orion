@@ -9,7 +9,7 @@ from orion.core.entity import Entity, entity
 class Axis(Entity):
     """One ndarray axis; ``name`` is the id (batch, step, layer, …)."""
 
-    description: str = ""
+    description: str
     """Human-readable meaning of this axis."""
 
     labels: tuple[str, ...] | None = None
