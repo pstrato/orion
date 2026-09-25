@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from orion.datasets.site_year import SiteYear
-from orion.datasets.wheat import DATASETS_CACHE, cache_wheat_archive, list_wheat_site_years
+from orion.datasets.wheat.catalogue import DATASETS_CACHE, cache_wheat_archive, list_wheat_site_years
 
 
 def _csv(*lines: str) -> str:

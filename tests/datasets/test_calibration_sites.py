@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from orion.datasets import to_kg_per_m2
+from orion.datasets.convert import to_kg_per_m2
 from orion.datasets.demo import available_site_years
 
 

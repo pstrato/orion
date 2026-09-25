@@ -7,20 +7,14 @@ from pathlib import Path
 
 import pytest
 
-from orion.datasets import (
-    DATASETS_CACHE,
-    SiteYear,
-    cache_wheat_archive,
-    grain_protein_from_nitrogen,
-    list_wheat_site_years,
-    parse_agmip_kassie,
-    parse_braunschweig,
-    parse_broadbalk,
-    parse_management_pack,
-    parse_muncheberg,
-    parse_westerfeld,
-    to_kg_per_m2,
-)
+from orion.datasets.convert import grain_protein_from_nitrogen, to_kg_per_m2
+from orion.datasets.site_year import SiteYear
+from orion.datasets.wheat.agmip import parse_agmip_kassie, parse_management_pack
+from orion.datasets.wheat.braunschweig import parse_braunschweig
+from orion.datasets.wheat.broadbalk import parse_broadbalk
+from orion.datasets.wheat.catalogue import DATASETS_CACHE, cache_wheat_archive, list_wheat_site_years
+from orion.datasets.wheat.muncheberg import parse_muncheberg
+from orion.datasets.wheat.westerfeld import parse_westerfeld
 
 
 def _write_csv(path: Path, header: str, *rows: str) -> None:

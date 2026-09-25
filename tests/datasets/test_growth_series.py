@@ -7,7 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from orion.datasets import parse_management_pack, to_kg_per_m2
+from orion.datasets.convert import to_kg_per_m2
+from orion.datasets.wheat.agmip import parse_management_pack
 
 
 def _write(path: Path, header: str, *rows: str) -> None:
