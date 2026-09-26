@@ -8,7 +8,6 @@ from orion.core.constant import Constant, const
 from orion.core.entity import Entity, entity
 
 if TYPE_CHECKING:
-    from orion.core.process import Process
     from orion.core.state import State
 
 
@@ -17,9 +16,6 @@ class Input(Entity):
 
     def states(self, *args, **kwargs) -> None | State | tuple[State, ...]:
         """Return the initial state(s)."""
-
-    def processes(self, *args, **kargs) -> None | Process | tuple[Process, ...]:
-        """Return the process(es) to run."""
 
 
 @entity()

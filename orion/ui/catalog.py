@@ -24,7 +24,7 @@ _DOMAIN_ORDER = {"crop": 0, "management": 1, "soil": 2}
 _HORIZON_INPUTS = frozenset({"ClockInput", "LocationInput"})
 _ROLE_CLASS_NAMES: dict[str, dict[str, str]] = {
     "clock": {"ClockInput": CLOCK},
-    "weather": {"OpenMeteoWeatherInput": WEATHER_OPEN_METEO},
+    "weather": {"WeatherInput": WEATHER_OPEN_METEO},
     "soil": {"SoilGridInput": SOIL_SOILGRIDS},
     "crop": {"WheatInput": CROP_WHEAT},
     "light_interception": {"BeerLambertLightInterceptionInput": LIGHT_INTERCEPTION_BEER_LAMBERT},
@@ -111,9 +111,28 @@ def _input_factory(cls: type[Input], name: str) -> ProcessInputFactory:
     def factory() -> Input:
         if cls.__name__ == "ClockInput":
             return _clock_input(name)
+        if cls.__name__ == "WeatherInput":
+            return _weather_input(name)
         return cls(name)
 
     return factory
+
+
+def _weather_input(name: str) -> Input:
+    import jax.numpy as jnp
+
+    from orion.core.axis import WITHIN_STEP
+    from orion.core.quantity import is_finite, is_non_negative
+    from orion.core.variable import var
+    from orion.processes.weather import WeatherInput
+
+    zeros = jnp.zeros((1,))
+    return WeatherInput(
+        name,
+        Ts=var("Ts", "°C", zeros, axes=(WITHIN_STEP,), constraint=is_finite),
+        Ps=var("Ps", "kg/m^2", zeros, axes=(WITHIN_STEP,), constraint=is_non_negative + is_finite),
+        Rs=var("Rs", "W/m^2", zeros, axes=(WITHIN_STEP,), constraint=is_non_negative + is_finite),
+    )
 
 
 def _is_input_class(cls: object) -> TypeGuard[type[Input]]:

@@ -14,7 +14,7 @@ from orion.core.input import Input, Inputs, LocationInput
 from orion.core.model import model
 from orion.core.setting import Settings
 from orion.core.state import State
-from orion.processes.clock import ClockInput
+from orion.processes.clock import ClockInput, ClockProcess
 from orion.processes.soil.soil import Soil, make_soil_layer
 
 
@@ -26,10 +26,6 @@ class FixtureSoilInput(Input):
         del args
         layer = make_soil_layer("layer-0", 0.0, 0.05)
         return Soil(name="soil", constraint=None, layers=(layer,))
-
-    def processes(self, *args: Input | State) -> None:
-        del args
-        return None
 
 
 @pytest.fixture
@@ -46,4 +42,4 @@ def clock_model(tmp_path: Path):
         geometry=const("geometry", "coordinate", Point(0.1, 51.5), "Parcel geometry"),
     )
     settings = Settings(name="test", cache_path=tmp_path, validate_inputs=False, validate_initial_states=False, validate_simulation_states=False)
-    return model("clock only", Inputs(name="field", inputs=(clock, location, FixtureSoilInput("stub soil"))), settings)
+    return model("clock only", settings, Inputs(name="field", inputs=(clock, location, FixtureSoilInput("stub soil"))), (ClockProcess("clock"),))

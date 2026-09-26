@@ -14,17 +14,18 @@ from shapely import Point
 from orion.clients.openmeteo import (
     OPENMETEO_ARCHIVE_URL,
     OPENMETEO_HOURLY,
-    OpenMeteoWeatherInput,
-    OpenMeteoWeatherProcess,
     clear_openmeteo_memory_cache,
-    fetch_openmeteo_hourly,
+    fetch_openmeteo_input,
     hourly_series_from_response,
 )
+from orion.core.axis import WITHIN_STEP
 from orion.core.constant import const
 from orion.core.input import LocationInput
+from orion.core.quantity import is_finite, is_non_negative
 from orion.core.setting import Settings
+from orion.core.variable import var
 from orion.processes.clock import Clock, ClockInput
-from orion.processes.weather import Weather
+from orion.processes.weather import Weather, WeatherInput, WeatherProcess
 
 
 class _Variable:
@@ -114,7 +115,8 @@ def test_hourly_response_without_data_is_rejected():
 def test_openmeteo_fetch_requests_the_archive_for_the_location_through_the_day_after_the_end(tmp_path):
     clear_openmeteo_memory_cache()
     client = _Client()
-    temperature, precipitation, radiation = fetch_openmeteo_hourly(_location(), _clock(), _settings(tmp_path), cast(openmeteo_requests.Client, client))
+    fetched = fetch_openmeteo_input(_location(), _clock(), _settings(tmp_path), cast(openmeteo_requests.Client, client))
+    assert isinstance(fetched, WeatherInput)
     assert len(client.calls) == 1
     url, params = client.calls[0]
     assert url == OPENMETEO_ARCHIVE_URL
@@ -123,22 +125,31 @@ def test_openmeteo_fetch_requests_the_archive_for_the_location_through_the_day_a
     assert params["start_date"] == "2024-01-01"
     assert params["end_date"] == "2024-01-03"
     assert params["hourly"] == list(OPENMETEO_HOURLY)
-    assert len(temperature) == 48
-    assert len(precipitation) == 48
-    assert len(radiation) == 48
+    assert fetched.Ts.value.shape == (48,)
+    assert fetched.Ps.value.shape == (48,)
+    assert fetched.Rs.value.shape == (48,)
 
 
 def test_repeated_openmeteo_fetch_for_the_same_place_and_horizon_is_not_sent_again(tmp_path):
     clear_openmeteo_memory_cache()
     client = _Client()
     settings = _settings(tmp_path)
-    fetch_openmeteo_hourly(_location(), _clock(), settings, cast(openmeteo_requests.Client, client))
-    fetch_openmeteo_hourly(_location(), _clock(), settings, cast(openmeteo_requests.Client, client))
+    fetch_openmeteo_input(_location(), _clock(), settings, cast(openmeteo_requests.Client, client))
+    fetch_openmeteo_input(_location(), _clock(), settings, cast(openmeteo_requests.Client, client))
     assert len(client.calls) == 1
 
 
+def _weather_input(temperature: jnp.ndarray, precipitation: jnp.ndarray, radiation: jnp.ndarray) -> WeatherInput:
+    return WeatherInput(
+        "weather",
+        Ts=var("Ts", "°C", temperature, axes=(WITHIN_STEP,), constraint=is_finite),
+        Ps=var("Ps", "kg/m^2", precipitation, axes=(WITHIN_STEP,), constraint=is_non_negative + is_finite),
+        Rs=var("Rs", "W/m^2", radiation, axes=(WITHIN_STEP,), constraint=is_non_negative + is_finite),
+    )
+
+
 def test_openmeteo_weather_starts_with_one_value_per_hour_of_the_step():
-    weather = OpenMeteoWeatherInput("weather").states(_clock())
+    weather = _weather_input(jnp.zeros((48,)), jnp.zeros((48,)), jnp.zeros((48,))).states(_clock())
     assert isinstance(weather, Weather)
     assert weather.Ts.value.shape == (3,)
     assert weather.Ps.value.shape == (3,)
@@ -149,35 +160,30 @@ def test_openmeteo_weather_starts_with_one_value_per_hour_of_the_step():
     assert weather.Ts.axes[0].name == "within_step"
 
 
-def test_openmeteo_process_keeps_the_fetched_hours_for_one_location(tmp_path, monkeypatch):
+def test_openmeteo_fetch_stores_the_hourly_series_on_the_weather_input(tmp_path, monkeypatch):
     clear_openmeteo_memory_cache()
     client = _Client()
     monkeypatch.setattr(openmeteo_requests, "Client", lambda *args, **kwargs: client)
-    process = OpenMeteoWeatherInput("weather").processes(_settings(tmp_path), _location(), _clock())
-    assert isinstance(process, OpenMeteoWeatherProcess)
-    assert process.Ts.shape == (1, 48)
-    assert process.Ps.shape == (1, 48)
-    assert process.Rs.shape == (1, 48)
-    assert jnp.allclose(process.Ts[0, :2], jnp.array([0.0, 1.0]))
-    assert jnp.allclose(process.Ps[0, :2], jnp.array([100.0, 101.0]))
-    assert process.delta == 3
+    fetched = fetch_openmeteo_input(_location(), _clock(), _settings(tmp_path), None)
+    assert isinstance(fetched, WeatherInput)
+    assert jnp.allclose(fetched.Ts.value[:2], jnp.array([0.0, 1.0]))
+    assert jnp.allclose(fetched.Ps.value[:2], jnp.array([100.0, 101.0]))
+    assert jnp.allclose(fetched.Rs.value[:2], jnp.array([200.0, 201.0]))
 
 
 def test_weather_step_copies_the_clock_hour_window_and_starts_precipitation_one_hour_later():
-    temperature = jnp.arange(10, dtype=float).reshape(1, 10)
-    precipitation = jnp.arange(100, 110, dtype=float).reshape(1, 10)
-    radiation = jnp.arange(200, 210, dtype=float).reshape(1, 10)
-    process = OpenMeteoWeatherProcess("OpenMeteoWeather", temperature, precipitation, radiation, 3)
-    weather = OpenMeteoWeatherInput("weather").states(_clock())
+    weather_input = _weather_input(jnp.arange(10, dtype=float), jnp.arange(100, 110, dtype=float), jnp.arange(200, 210, dtype=float))
+    weather = weather_input.states(_clock())
     assert isinstance(weather, Weather)
+    process = WeatherProcess("weather")
 
-    first = process.step(_clock_at(0), weather)
-    assert jnp.allclose(first.Ts.value, jnp.array([[0.0, 1.0, 2.0]]))
-    assert jnp.allclose(first.Ps.value, jnp.array([[101.0, 102.0, 103.0]]))
-    assert jnp.allclose(first.Rs.value, jnp.array([[200.0, 201.0, 202.0]]))
+    first = process.step(_clock_at(0), weather_input, weather)
+    assert jnp.allclose(first.Ts.value, jnp.array([0.0, 1.0, 2.0]))
+    assert jnp.allclose(first.Ps.value, jnp.array([101.0, 102.0, 103.0]))
+    assert jnp.allclose(first.Rs.value, jnp.array([200.0, 201.0, 202.0]))
     assert first.name == weather.name
 
-    second = process.step(_clock_at(1), first)
-    assert jnp.allclose(second.Ts.value, jnp.array([[3.0, 4.0, 5.0]]))
-    assert jnp.allclose(second.Ps.value, jnp.array([[104.0, 105.0, 106.0]]))
-    assert jnp.allclose(second.Rs.value, jnp.array([[203.0, 204.0, 205.0]]))
+    second = process.step(_clock_at(1), weather_input, first)
+    assert jnp.allclose(second.Ts.value, jnp.array([3.0, 4.0, 5.0]))
+    assert jnp.allclose(second.Ps.value, jnp.array([104.0, 105.0, 106.0]))
+    assert jnp.allclose(second.Rs.value, jnp.array([203.0, 204.0, 205.0]))

@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from orion.clients.openmeteo import OpenMeteoWeatherInput
 from orion.clients.soilgrids import SoilGridInput
 from orion.core.input import Input
+from orion.processes.weather import WeatherInput
 from orion.ui.catalog import (
     catalog_select_options,
     discover_process_inputs,
@@ -33,7 +33,7 @@ def test_provider_catalog_lists_importable_weather_and_soil():
     assert isinstance(make_clock_input("Clock"), ClockInput)
     assert weather_provider_options()["Open-Meteo"] == "Open-Meteo"
     assert soil_provider_options()["SoilGrids"] == "SoilGrids"
-    assert isinstance(make_weather_input("Open-Meteo"), OpenMeteoWeatherInput)
+    assert isinstance(make_weather_input("Open-Meteo"), WeatherInput)
     assert isinstance(make_soil_input("SoilGrids"), SoilGridInput)
 
 

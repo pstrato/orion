@@ -15,11 +15,11 @@ from orion.ui.process_explorer import (
 )
 
 
-def test_discover_process_classes_includes_clock_and_openmeteo():
+def test_discover_process_classes_includes_clock_and_weather():
     processes = discover_process_classes()
     labels = {p.label for p in processes}
     assert "ClockProcess" in labels
-    assert "OpenMeteoWeatherProcess" in labels
+    assert "WeatherProcess" in labels
     clock = next(p for p in processes if p.label == "ClockProcess")
     assert clock.implemented is True
     assert any(cls.__name__ == "Clock" for cls in clock.input_states)

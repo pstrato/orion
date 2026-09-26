@@ -87,15 +87,6 @@ def invoke_input_states(inputs: Sequence[Input], *extras: object) -> dict[type[S
     return states
 
 
-def invoke_input_processes(inputs: Sequence[Input], states: Mapping[type[State], State], *extras: object) -> tuple[Process, ...]:
-    """Invoke each input's ``processes``. States already created by the inputs are available."""
-    available = _index([*extras, *inputs, *states.values()])
-    processes: list[Process] = []
-    for item in inputs:
-        processes.extend(_expect(invoke(item.processes, available), Process, item.processes))
-    return tuple(processes)
-
-
 def invoke_process_step(process: Process, inputs: Iterable[Input], states: Mapping[type[State], State], *extras: object) -> dict[type[State], State]:
     """Invoke ``process.step`` and replace each returned state of the same concrete type."""
     available = _index([*extras, *inputs, *states.values()])

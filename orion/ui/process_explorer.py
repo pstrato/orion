@@ -243,16 +243,11 @@ def default_input_for(info: ProcessInfo) -> Input:
 
 def instantiate_process(info: ProcessInfo) -> Entity:
     """Construct a process instance for the lab."""
-    from orion.clients.openmeteo import OpenMeteoWeatherProcess
     from orion.processes.clock import ClockProcess
 
     cls = info.cls
     if cls is ClockProcess:
         return ClockProcess("clock")
-    if cls is OpenMeteoWeatherProcess:
-        n = 24
-        zeros = jnp.zeros((n,))
-        return OpenMeteoWeatherProcess(name="openmeteo", Ts=zeros, Ps=zeros, Rs=zeros, delta=3)
     return cls(info.label)  # type: ignore[call-arg]
 
 

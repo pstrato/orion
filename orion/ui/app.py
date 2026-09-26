@@ -23,7 +23,7 @@ from orion.core.input import Input, Inputs, LocationInput
 from orion.core.model import Model, model
 from orion.core.setting import Settings
 from orion.processes.clock import ClockInput
-from orion.ui.catalog import configured_process_inputs, make_clock_input, unimplemented_process_labels
+from orion.ui.catalog import configured_process_inputs, configured_weather_input, make_clock_input, unimplemented_process_labels
 from orion.ui.configuration import Configuration, default_configuration
 from orion.ui.configuration_tab import render_configuration_tab
 from orion.ui.entity_editor import render_entity_values
@@ -47,6 +47,7 @@ from orion.ui.runs import (
     planned_runs,
     selected_site_years,
 )
+from orion.ui.session import load_session
 from orion.ui.settings_units import unit_alternative_options
 from orion.ui.simulation_results import ResultsPanels, VisiblePlot, build_visible_plots
 from orion.ui.theme import FAVICON_PATH, ICON_PATH, apply_theme, setting_row
@@ -111,6 +112,16 @@ class AppState:
     compile_cache: ConfigurationCompileCache = field(default_factory=ConfigurationCompileCache)
     warm_models: WarmModelCache = field(default_factory=WarmModelCache)
 
+    def __setattr__(self, name: str, value: object) -> None:
+        object.__setattr__(self, name, value)
+        if name.startswith("_") or name in {"runs", "results", "compile_cache", "warm_models"}:
+            return
+        if not getattr(self, "_autosave", False):
+            return
+        from orion.ui.session import save_session
+
+        save_session(self)
+
     @property
     def cache_path(self) -> Path:
         return Path(self.settings.cache_path)
@@ -123,8 +134,8 @@ class AppState:
 def build_inputs(state: AppState, configuration: Configuration) -> Inputs:
     """Assemble top-level inputs from session state and the chosen configuration.
 
-    Clock and location are entities on ``Inputs.inputs``. Settings are an
-    argument of ``model``, not a field of ``Inputs``.
+    Clock, location, and the configuration's weather input are on ``Inputs.inputs``.
+    Settings are an argument of ``model``, not a field of ``Inputs``.
     """
     clock = make_clock_input(configuration.clock)
     if isinstance(clock, ClockInput):
@@ -139,7 +150,7 @@ def build_inputs(state: AppState, configuration: Configuration) -> Inputs:
         name=state.location_name,
         geometry=const("geometry", "coordinate", Point(float(state.longitude), float(state.latitude)), "Location geometry"),
     )
-    pieces: list[Input] = [clock, location, *configured_process_inputs(configuration)]
+    pieces: list[Input] = [clock, location, configured_weather_input(configuration), *configured_process_inputs(configuration)]
     return Inputs(name="field input", inputs=tuple(pieces))
 
 
@@ -183,7 +194,9 @@ def build_model(state: AppState, configuration: Configuration, site_year: Any | 
         from orion.datasets.inputs import inputs_for_site_year
 
         inputs = inputs_for_site_year(template, site_year)
-    return model(configuration.name, inputs, state.settings)
+    from orion.processes.clock import ClockProcess
+
+    return model(configuration.name, state.settings, inputs, (ClockProcess("clock"),))
 
 
 def _step_count(built: Model) -> int:
@@ -257,7 +270,7 @@ def _render_settings_tab(state: AppState, host, on_prefs_changed: Callable[[UiPr
 
             def save_settings() -> None:
                 chosen = {canonical: str(selector.value) for canonical, selector in selectors.items()}
-                state.prefs.unit_alternatives = resolve_unit_alternatives(chosen)
+                state.prefs = replace(state.prefs, unit_alternatives=resolve_unit_alternatives(chosen))
                 save_preferences(state.prefs)
                 if on_prefs_changed is not None:
                     on_prefs_changed(state.prefs)
@@ -513,8 +526,9 @@ def _render_simulation_tab(state: AppState, sim_host, results_host, status_label
 
                         def make_sw(i: int, switch=sw):
                             def on_toggle(_) -> None:
-                                c = state.configurations[i]
-                                state.configurations[i] = c.with_enabled(bool(switch.value))
+                                configs = list(state.configurations)
+                                configs[i] = configs[i].with_enabled(bool(switch.value))
+                                state.configurations = configs
 
                             return on_toggle
 
@@ -589,7 +603,8 @@ def _render_simulation_tab(state: AppState, sim_host, results_host, status_label
 def create_page() -> None:
     """Build the multi-tab ops UI."""
     apply_theme()
-    state = AppState()
+    state = load_session()
+    object.__setattr__(state, "_autosave", True)
     refreshers: dict[str, Callable[[], None]] = {}
 
     def refresh_all() -> None:

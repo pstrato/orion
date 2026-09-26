@@ -8,7 +8,7 @@ from __future__ import annotations
 import pytest
 
 from orion.core.input import Input
-from orion.core.invoke import invoke_input_processes, invoke_input_states, invoke_process_step
+from orion.core.invoke import invoke_input_states, invoke_process_step
 from orion.core.process import Process
 from orion.core.state import State
 
@@ -29,9 +29,6 @@ class ClockInput(Input):
 class ReadingInput(Input):
     def states(self, clock: Clock) -> Reading:
         return Reading("reading", None, clock)
-
-    def processes(self, clock: Clock) -> Marker:
-        return Marker("marker", clock.name)
 
 
 class NeedsClockFirst(Input):
@@ -85,33 +82,14 @@ def test_a_second_state_of_the_same_concrete_type_is_rejected():
         invoke_input_states([ClockInput("clock-input"), AlsoClock("again")])
 
 
-def test_processes_receive_states_created_by_the_inputs():
-    states = invoke_input_states([ClockInput("clock-input"), ReadingInput("reading-input")])
-    processes = invoke_input_processes([ReadingInput("reading-input"), ClockInput("clock-input")], states)
-    assert len(processes) == 1
-    assert isinstance(processes[0], Marker)
-    assert processes[0].label == "clock"
-
-
 class NeedsAnyState(Input):
     def states(self, state: State) -> Reading:
         return Reading(state.name, None)
 
 
-class AsksForAnyState(Input):
-    def processes(self, state: State) -> Marker:
-        return Marker("marker", state.name)
-
-
 def test_a_base_type_matches_the_only_concrete_instance():
     states = invoke_input_states([ClockInput("clock-input"), NeedsAnyState("needs")])
     assert states[Reading].name == "clock"
-
-
-def test_a_base_type_with_two_concrete_instances_is_rejected():
-    states = invoke_input_states([ClockInput("clock-input"), ReadingInput("reading-input")])
-    with pytest.raises(ValueError, match="more than one concrete type"):
-        invoke_input_processes([AsksForAnyState("asks"), ClockInput("clock-input"), ReadingInput("reading-input")], states)
 
 
 class OptionalClock(Input):

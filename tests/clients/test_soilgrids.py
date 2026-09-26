@@ -18,7 +18,7 @@ from orion.clients.soilgrids import (
     fetch_soilgrids,
 )
 from orion.core.constant import const
-from orion.core.input import Inputs, LocationInput
+from orion.core.input import LocationInput
 from orion.core.setting import Settings
 from orion.processes.soil.soil import Soil
 
@@ -163,7 +163,3 @@ def test_soil_state_queries_the_location_longitude_and_latitude(tmp_path, monkey
     SoilGridInput("soil").states(_settings(tmp_path), _location(0.1, 51.5))
     assert seen["lon"] == pytest.approx(0.1)
     assert seen["lat"] == pytest.approx(51.5)
-
-
-def test_soilgrids_input_adds_no_process():
-    assert SoilGridInput("soil").processes(Inputs("run", ())) == ()

@@ -71,6 +71,15 @@ def test_configuration_tab_lists_process_inputs_then_edits_the_selected_one():
     assert 'icon="add"' in source
 
 
+def test_build_inputs_includes_the_configured_weather_input(tmp_path):
+    from orion.processes.weather import WeatherInput
+    from orion.ui.app import AppState, build_inputs, ui_settings
+
+    built = build_inputs(AppState(settings=ui_settings(cache_path=tmp_path)), default_configuration())
+    weather = [item for item in built.inputs if isinstance(item, WeatherInput)]
+    assert len(weather) == 1
+
+
 def test_build_inputs_keeps_clock_delta_editable(tmp_path):
     from orion.processes.clock import ClockInput
     from orion.ui.app import AppState, build_inputs, ui_settings

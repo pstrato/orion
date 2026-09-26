@@ -8,24 +8,16 @@ from typing import cast
 
 from orion.core.entity import Entity, entity
 from orion.core.input import Input, Inputs
-from orion.core.invoke import Assignment, invoke_input_processes, invoke_input_states, process_argument_slots, process_assignment
+from orion.core.invoke import Assignment, invoke_input_states, process_argument_slots, process_assignment
 from orion.core.process import Process
 from orion.core.setting import Settings
 from orion.core.state import State
 
 
-def model(name: str, inputs: Inputs, settings: Settings) -> Model:
-    """Build a model, planning each process call and its write-back.
-
-    Every input on ``inputs`` is listed first, including inputs nested in
-    other inputs. ``Inputs`` and ``Settings`` are available to each of them.
-    States stay in the order the inputs created them. Processes run in that
-    same order. Each ``step`` argument is a state index. Each result is
-    written to the indexes named by the return annotation.
-    """
+def model(name: str, settings: Settings, inputs: Inputs, processes: tuple[Process, ...]) -> Model:
+    """Build a model to simulate inputs."""
     catalog = _listed_inputs(inputs)
     state_map = invoke_input_states(catalog, inputs, settings)
-    processes = invoke_input_processes(catalog, state_map, inputs, settings)
     state_classes = tuple(state_map)
     state_index = MappingProxyType({cls: index for index, cls in enumerate(state_classes)})
     process_arguments = tuple(process_argument_slots(process, catalog, state_map, inputs, settings) for process in processes)

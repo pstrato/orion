@@ -4,8 +4,7 @@ import requests
 
 from orion.clients.http_cache import cached_session
 from orion.core.entity import entity
-from orion.core.input import Input, Inputs, LocationInput
-from orion.core.process import Process
+from orion.core.input import Input, LocationInput
 from orion.core.setting import Settings
 from orion.datasets.convert import to_kg_per_kg, to_kg_per_m3
 from orion.processes.soil.soil import Soil, SoilLayer, make_soil_layer
@@ -187,6 +186,3 @@ class SoilGridInput(Input):
                 )
             )
         return Soil("soilgrids", None, layers=tuple(layers))
-
-    def processes(self, inputs: Inputs) -> tuple[Process, ...]:
-        return ()
