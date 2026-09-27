@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import replace
+from functools import partial
 from typing import cast
 
 import jax
@@ -86,17 +87,40 @@ def simulate_all(settings: Settings, inputs: tuple[Inputs, ...], processes: tupl
     return finals, histories
 
 
+def _scan_body(settings: Settings, inputs: Inputs, processes: tuple[Process, ...], keep_history: bool, current: Model, _index: jax.Array) -> tuple[Model, Model | None]:
+    del _index
+    nxt = step(current, settings, inputs, processes)
+    return nxt, nxt if keep_history else None
+
+
+def _run(settings: Settings, inputs: Inputs, processes: tuple[Process, ...], count: int, *, keep_history: bool) -> tuple[Model, Model | None]:
+    current = model(inputs.name, settings, inputs)
+    final, history = jax.lax.scan(partial(_scan_body, settings, inputs, processes, keep_history), current, jnp.arange(count))
+    return cast(Model, final), cast(Model | None, history)
+
+
+def _simulate_run(settings: Settings, inputs: Inputs, processes: tuple[Process, ...], count: int, keep_history: bool) -> tuple[Model, Model | None]:
+    return _run(settings, inputs, processes, count, keep_history=keep_history)
+
+
+def _simulate_one(settings: Settings, processes: tuple[Process, ...], count: int, keep_history: bool, single: Inputs) -> tuple[Model, Model | None]:
+    return _run(settings, single, processes, count, keep_history=keep_history)
+
+
+def _simulate_batch(settings: Settings, batched_inputs: Inputs, processes: tuple[Process, ...], count: int, keep_history: bool) -> tuple[Model, Model | None]:
+    return cast(tuple[Model, Model | None], jax.vmap(partial(_simulate_one, settings, processes, count, keep_history))(batched_inputs))
+
+
+_jitted_simulate_run = jax.jit(_simulate_run, static_argnames=("count", "keep_history"))
+_jitted_simulate_batch = jax.jit(_simulate_batch, static_argnames=("count", "keep_history"))
+
+
 def _compiled_run(settings: Settings, inputs: Inputs, processes: tuple[Process, ...], *, jit: bool, keep_history: bool) -> tuple[Model, Model | None]:
     count = clock_steps(inputs)
     device = compute_device(settings.use_gpu)
-
-    def run(settings: Settings, inputs: Inputs, processes: tuple[Process, ...]) -> tuple[Model, Model | None]:
-        return _run(settings, inputs, processes, count, keep_history=keep_history)
-
-    compiled = jax.jit(run) if jit else run
+    compiled = _jitted_simulate_run if jit else _simulate_run
     with jax.default_device(device):
-        final, history = compiled(settings, inputs, processes)
-
+        final, history = compiled(settings, inputs, processes, count, keep_history)
     if keep_history:
         assert history is not None
         history = replace(
@@ -114,34 +138,14 @@ def _compiled_batch(settings: Settings, inputs: tuple[Inputs, ...], processes: t
     count = clock_steps(inputs[0])
     batched = _stack_inputs(inputs)
     device = compute_device(settings.use_gpu)
-
-    def run(settings: Settings, batched_inputs: Inputs, processes: tuple[Process, ...]) -> tuple[Model, Model | None]:
-        def one(single: Inputs) -> tuple[Model, Model | None]:
-            return _run(settings, single, processes, count, keep_history=keep_history)
-
-        return cast(tuple[Model, Model | None], jax.vmap(one)(batched_inputs))
-
-    compiled = jax.jit(run) if jit else run
+    compiled = _jitted_simulate_batch if jit else _simulate_batch
     with jax.default_device(device):
-        finals, histories = compiled(settings, batched, processes)
-
+        finals, histories = compiled(settings, batched, processes, count, keep_history)
     if keep_history:
         assert histories is not None
         histories = replace(histories, axes=(inputs_axis(inputs), step_axis(count)))
     finals = replace(finals, axes=(inputs_axis(inputs),))
     return finals, histories
-
-
-def _run(settings: Settings, inputs: Inputs, processes: tuple[Process, ...], count: int, *, keep_history: bool) -> tuple[Model, Model | None]:
-    current = model(inputs.name, settings, inputs)
-
-    def body(current: Model, _index: jax.Array) -> tuple[Model, Model | None]:
-        del _index
-        nxt = step(current, settings, inputs, processes)
-        return nxt, nxt if keep_history else None
-
-    final, history = jax.lax.scan(body, current, jnp.arange(count))
-    return cast(Model, final), cast(Model | None, history)
 
 
 def _listed_inputs(inputs: Inputs) -> tuple[Input, ...]:
