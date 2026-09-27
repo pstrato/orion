@@ -8,12 +8,12 @@ from pathlib import Path
 from orion.core.input import LocationInput
 from orion.datasets.convert import to_kg_per_kg, to_kg_per_m2
 from orion.datasets.events import ManagementEvent, ProtectionEvent, fertiliser_event, irrigation_event, protection_event, sowing_event
-from orion.datasets.io import as_mapping, cell, event_name, group_rows, parse_date, parse_float, point_location, read_rows
+from orion.datasets.io import as_mapping, cell, event_name, group_rows, location_from_row, parse_date, parse_float, point_location, read_rows
 from orion.datasets.observations import Observation, make_observation
 from orion.datasets.protection import protection_kind
 from orion.datasets.site_year import SiteYear
 
-MUNCHEBERG_LOCATION = point_location("muncheberg", 14.12, 52.52)
+MUNCHEBERG_LOCATION = point_location("muncheberg", 14.12, 52.52, 62.0)
 SOURCE = "muncheberg"
 
 
@@ -86,11 +86,7 @@ def parse_muncheberg(directory: Path) -> tuple[SiteYear, ...]:
 
 
 def _location(plot: dict[str, str]) -> LocationInput:
-    lat = parse_float(cell(plot, "latitude"))
-    lon = parse_float(cell(plot, "longitude"))
-    if lat is None or lon is None:
-        return MUNCHEBERG_LOCATION
-    return point_location("muncheberg", lon, lat)
+    return location_from_row(plot, MUNCHEBERG_LOCATION)
 
 
 def _crop_observations(rows: list[dict[str, str]]) -> tuple[Observation, ...]:

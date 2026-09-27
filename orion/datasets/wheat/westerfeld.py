@@ -8,12 +8,12 @@ from pathlib import Path
 from orion.core.input import LocationInput
 from orion.datasets.convert import to_kg_per_kg, to_kg_per_m2
 from orion.datasets.events import FertiliserEvent, ProtectionEvent, SowingEvent, fertiliser_event, protection_event, sowing_event
-from orion.datasets.io import as_mapping, cell, event_name, group_rows, is_wheat, parse_date, parse_float, point_location, read_rows
+from orion.datasets.io import as_mapping, cell, event_name, group_rows, is_wheat, location_from_row, parse_date, parse_float, point_location, read_rows
 from orion.datasets.observations import Observation, make_observation
 from orion.datasets.protection import protection_kind
 from orion.datasets.site_year import SiteYear
 
-WESTERFELD_LOCATION = point_location("westerfeld", 11.702, 51.819)
+WESTERFELD_LOCATION = point_location("westerfeld", 11.702, 51.819, 94.0)
 SOURCE = "westerfeld"
 
 
@@ -98,11 +98,7 @@ def _optional(directory: Path, name: str) -> tuple[dict[str, str], ...]:
 
 
 def _location(plot: dict[str, str]) -> LocationInput:
-    lat = parse_float(cell(plot, "latitude"))
-    lon = parse_float(cell(plot, "longitude"))
-    if lat is None or lon is None:
-        return WESTERFELD_LOCATION
-    return point_location("westerfeld", lon, lat)
+    return location_from_row(plot, WESTERFELD_LOCATION)
 
 
 def _yield_observations(rows: list[dict[str, str]], sowing: date, season: str) -> tuple[Observation, ...]:

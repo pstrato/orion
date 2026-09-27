@@ -12,7 +12,7 @@ from orion.datasets.observations import Observation, make_observation
 from orion.datasets.protection import protection_kind
 from orion.datasets.site_year import SiteYear
 
-BRAUNSCHWEIG_LOCATION = point_location("braunschweig", 10.45, 52.3)
+BRAUNSCHWEIG_LOCATION = point_location("braunschweig", 10.45, 52.3, 79.0)
 SOURCE = "braunschweig"
 
 

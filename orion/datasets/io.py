@@ -86,7 +86,7 @@ def location_from_row(row: dict[str, str], fallback: LocationInput) -> LocationI
         if name == fallback.name and altitude is None:
             return fallback
         return point_location(name, fallback.geometry.value.x, fallback.geometry.value.y, height)
-    return point_location(name, lon, lat, 0.0 if altitude is None else altitude)
+    return point_location(name, lon, lat, height)
 
 
 def group_rows(rows: tuple[dict[str, str], ...], *keys: str) -> dict[tuple[str, ...], list[dict[str, str]]]:

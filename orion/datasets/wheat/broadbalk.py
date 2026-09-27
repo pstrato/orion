@@ -11,7 +11,7 @@ from orion.datasets.io import cell, event_name, parse_date, parse_float, point_l
 from orion.datasets.observations import make_observation
 from orion.datasets.site_year import SiteYear
 
-BROADBALK_LOCATION = point_location("broadbalk", -0.37, 51.81)
+BROADBALK_LOCATION = point_location("broadbalk", -0.37, 51.81, 130.0)
 SOURCE = "broadbalk"
 
 

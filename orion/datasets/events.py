@@ -7,14 +7,15 @@ from datetime import date
 from orion.core.constant import Constant, const
 from orion.core.entity import Entity, entity
 from orion.core.quantity import is_non_negative, is_scalar
+from orion.core.resource import Resource
 
 
 def _on(when: date) -> Constant[date]:
     return const("on", "isodate", when, description="Calendar date")
 
 
-def _mass(name: str, kilograms_per_m2: float, description: str) -> Constant[float]:
-    return const(name, "kg/m^2", kilograms_per_m2, description=description, constraint=is_scalar + is_non_negative)
+def _mass(name: str, kilograms_per_m2: float, description: str, resource: Resource) -> Constant[float]:
+    return const(name, "kg/m^2", kilograms_per_m2, description=description, constraint=is_scalar + is_non_negative, resource=resource)
 
 
 @entity()
@@ -41,10 +42,10 @@ class FertiliserEvent(Entity):
     n: Constant[float]
     """Nitrogen applied in kg/m²."""
 
-    p: Constant[float] = _mass("p", 0.0, "Phosphorus applied")
+    p: Constant[float] = _mass("p", 0.0, "Phosphorus applied", "phosphorus")
     """Phosphorus applied in kg/m²."""
 
-    k: Constant[float] = _mass("k", 0.0, "Potassium applied")
+    k: Constant[float] = _mass("k", 0.0, "Potassium applied", "potassium")
     """Potassium applied in kg/m²."""
 
     product: str = ""
@@ -100,7 +101,14 @@ def sowing_event(name: str, on: date, density: float | None = None, depth: float
 
 def fertiliser_event(name: str, on: date, n: float, p: float = 0.0, k: float = 0.0, product: str = "") -> FertiliserEvent:
     """Fertiliser event with nutrient rates in kg/m²."""
-    return FertiliserEvent(name, on=_on(on), n=_mass("n", n, "Nitrogen applied"), p=_mass("p", p, "Phosphorus applied"), k=_mass("k", k, "Potassium applied"), product=product)
+    return FertiliserEvent(
+        name,
+        on=_on(on),
+        n=_mass("n", n, "Nitrogen applied", "nitrogen"),
+        p=_mass("p", p, "Phosphorus applied", "phosphorus"),
+        k=_mass("k", k, "Potassium applied", "potassium"),
+        product=product,
+    )
 
 
 def protection_event(name: str, on: date, kind: str, product: str = "", active_ingredient: str = "", rate: float | None = None, rate_unit: str = "") -> ProtectionEvent:
@@ -110,4 +118,4 @@ def protection_event(name: str, on: date, kind: str, product: str = "", active_i
 
 def irrigation_event(name: str, on: date, amount: float) -> IrrigationEvent:
     """Irrigation event with the amount in kg/m²."""
-    return IrrigationEvent(name, on=_on(on), amount=_mass("amount", amount, "Irrigation amount"))
+    return IrrigationEvent(name, on=_on(on), amount=_mass("amount", amount, "Irrigation amount", "water"))
