@@ -128,6 +128,46 @@ DENSE_CSS = f"""
   user-select: none;
   touch-action: none;
 }}
+.orion-canopy {{
+  height: calc(100vh - 188px);
+  min-height: 420px;
+  min-width: 0;
+  background: white;
+  border-radius: 6px;
+  touch-action: none;
+  user-select: none;
+  flex: 1 1 auto;
+}}
+.orion-light-panel {{
+  background: white;
+  border-radius: 6px;
+  padding: 8px 10px;
+  width: 17rem;
+  flex: 0 0 17rem;
+  align-self: flex-start;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 12px;
+}}
+.orion-light-readout {{
+  font-variant-numeric: tabular-nums;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 12px;
+  min-width: 5.5rem;
+  text-align: right;
+}}
+.orion-light-track {{
+  height: 8px;
+  background: #E6EEF5;
+  border-radius: 4px;
+  flex: 1;
+}}
+.orion-light-fill {{
+  height: 8px;
+  border-radius: 4px;
+  width: 0%;
+}}
 .orion-fetch-bar,
 .orion-fetch-bar .q-linear-progress__model,
 .orion-fetch-bar .q-linear-progress__track {{

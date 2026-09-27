@@ -21,11 +21,13 @@ from shapely import Point
 from orion.core.constant import const
 from orion.core.input import Input, Inputs, LocationInput
 from orion.core.model import Model, model
+from orion.core.process import Process
 from orion.core.setting import Settings
 from orion.processes.clock import ClockInput
 from orion.ui.catalog import configured_process_inputs, configured_weather_input, make_clock_input, unimplemented_process_labels
 from orion.ui.configuration import Configuration, default_configuration
 from orion.ui.configuration_tab import render_configuration_tab
+from orion.ui.device import apply_compute_device
 from orion.ui.entity_editor import render_entity_values
 from orion.ui.fetch_status import FetchProgress, discard_fetch_progress, fetch_progress, latest_fetch_progress
 from orion.ui.preferences import UiPreferences, load_preferences, merge_plot_order, save_preferences
@@ -49,10 +51,11 @@ from orion.ui.runs import (
 )
 from orion.ui.session import load_session
 from orion.ui.settings_units import unit_alternative_options
+from orion.ui.simulate import finish_inputs
 from orion.ui.simulation_results import ResultsPanels, VisiblePlot, build_visible_plots
 from orion.ui.theme import FAVICON_PATH, ICON_PATH, apply_theme, setting_row
 from orion.ui.units import display_unit_for, resolve_unit_alternatives
-from orion.ui.warm_model_key import ConfigurationCompileCache, WarmModelCache, warm_model_key
+from orion.ui.warm_model_key import ConfigurationCompileCache, WarmModelCache
 
 CACHE_PATH = Path(__file__).resolve().parents[2] / "cache"
 DEFAULT_YEAR = 2024
@@ -188,30 +191,42 @@ def simulation_start_error(state: AppState) -> str | None:
 
 
 def build_model(state: AppState, configuration: Configuration, site_year: Any | None = None) -> Model:
-    template = build_inputs(state, configuration)
-    inputs = template
-    if site_year is not None:
-        from orion.datasets.inputs import inputs_for_site_year
+    return model(configuration.name, state.settings, simulation_inputs(state, configuration, site_year))
 
-        inputs = inputs_for_site_year(template, site_year)
+
+def simulation_inputs(state: AppState, configuration: Configuration, site_year: Any | None = None) -> Inputs:
+    """Inputs for one run. A site-year replaces the template location and horizon."""
+    inputs = build_inputs(state, configuration)
+    if site_year is None:
+        return inputs
+    from orion.datasets.inputs import inputs_for_site_year
+
+    return inputs_for_site_year(inputs, site_year)
+
+
+def load_simulation_weather(settings: Settings, inputs: Inputs) -> Inputs:
+    """Replace the zero weather placeholder with the Open-Meteo archive for this clock and location."""
+    from orion.clients.openmeteo import fetch_openmeteo_input
+    from orion.processes.weather import WeatherInput
+
+    clock = next((item for item in inputs.inputs if isinstance(item, ClockInput)), None)
+    location = next((item for item in inputs.inputs if isinstance(item, LocationInput)), None)
+    if clock is None or location is None or not any(isinstance(item, WeatherInput) for item in inputs.inputs):
+        return inputs
+    fetched = fetch_openmeteo_input(location, clock, settings, None)
+    pieces = tuple(replace(fetched, name=item.name) if isinstance(item, WeatherInput) else item for item in inputs.inputs)
+    return replace(inputs, inputs=pieces)
+
+
+def simulation_processes(_configuration: Configuration) -> tuple[Process, ...]:
+    """Stateless processes applied on every step of this configuration.
+
+    Weather runs before the clock advances, so the hour window is the step just taken.
+    """
     from orion.processes.clock import ClockProcess
+    from orion.processes.weather import WeatherProcess
 
-    return model(configuration.name, state.settings, inputs, (ClockProcess("clock"),))
-
-
-def _step_count(built: Model) -> int:
-    """Steps implied by the clock input: days × 24 / delta hours."""
-    for _, entity in built.inputs.all_entities():
-        if isinstance(entity, ClockInput):
-            days = (entity.end.value - entity.start.value).days
-            delta = int(entity.delta.value)
-            if delta <= 0:
-                raise ValueError("Step hours must be positive.")
-            count = int(days) * 24 // delta
-            if count < 1:
-                raise ValueError("Horizon is shorter than one step.")
-            return count
-    raise ValueError("Model has no clock input.")
+    return (WeatherProcess("weather"), ClockProcess("clock"))
 
 
 def _block_ready(value: Model) -> Model:
@@ -255,6 +270,15 @@ def _render_settings_tab(state: AppState, host, on_prefs_changed: Callable[[UiPr
 
             def on_setting(path: str, value: object) -> None:
                 state.settings = set_entity_value(state.settings, path, value)
+                if path != "use_gpu":
+                    return
+                try:
+                    apply_compute_device(bool(value))
+                except ValueError as exc:
+                    state.settings = set_entity_value(state.settings, path, False)
+                    apply_compute_device(False)
+                    ui.notify(str(exc), type="negative")
+                    render()
 
             render_entity_values(state.settings, on_setting)
 
@@ -479,20 +503,18 @@ def _simulate_planned_runs(
 ) -> tuple[dict[str, tuple[Model, Model]], RunTiming, tuple[VisiblePlot, ...]]:
     out: dict[str, tuple[Model, Model]] = {}
     with collect_timing() as timing:
-        before = state.compile_cache.fingerprint
         state.compile_cache.sync(tuple(state.configurations))
-        if before is not None and before != state.compile_cache.fingerprint:
-            state.warm_models.clear()
+        jobs: list[tuple[Inputs, tuple[Process, ...]]] = []
         with fetch_progress(progress_queue.put):
             for run in runs:
-                key = warm_model_key(state, run)
-                built = state.warm_models.resolve(key, lambda r=run: build_model(state, r.configuration, r.site_year))
-                with timed("simulate"):
-                    steps = _step_count(built)
-                    final, history = state.compile_cache.simulate(built, steps)
-                    final = _block_ready(final)
-                    history = _block_ready(history)
-                out[run.name] = (final, history)
+                inputs = simulation_inputs(state, run.configuration, run.site_year)
+                with timed("openmeteo"):
+                    inputs = load_simulation_weather(state.settings, inputs)
+                jobs.append((inputs, simulation_processes(run.configuration)))
+        with timed("simulate"):
+            finished = finish_inputs(state.settings, jobs)
+        for run, (final, history) in zip(runs, finished, strict=True):
+            out[run.name] = (_block_ready(final), _block_ready(history))
     first_history = next(iter(out.values()))[1]
     order = merge_plot_order(state.prefs.plot_order, list_plot_keys(first_history))
     tiles = build_visible_plots(out, runs, order, state.step_hours, state.prefs.unit_alternatives)
@@ -605,6 +627,12 @@ def create_page() -> None:
     apply_theme()
     state = load_session()
     object.__setattr__(state, "_autosave", True)
+    try:
+        apply_compute_device(bool(state.settings.use_gpu))
+    except ValueError as exc:
+        state.settings = set_entity_value(state.settings, "use_gpu", False)
+        apply_compute_device(False)
+        ui.notify(str(exc), type="negative")
     refreshers: dict[str, Callable[[], None]] = {}
 
     def refresh_all() -> None:

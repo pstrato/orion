@@ -13,7 +13,7 @@ from typing import Iterable
 import jax.numpy as jnp
 
 from orion.core.entity import Entity
-from orion.core.input import LocationInput
+from orion.core.input import Inputs, LocationInput
 from orion.core.model import Model
 from orion.core.process import Process
 from orion.core.quantity import Quantity
@@ -84,15 +84,15 @@ def inspect_state(state: State) -> EntityView:
     return _view(state, kind="state")
 
 
-def inspect_model(model: Model) -> ModelView:
-    """Reflect the full model tree for UI rendering."""
-    step_hours, days = _clock_horizon(model)
-    location_name, latitude, longitude = _location(model)
+def inspect_model(model: Model, inputs: Inputs, processes: tuple[Process, ...] = ()) -> ModelView:
+    """Reflect the model states, plus the inputs and processes supplied for the run."""
+    step_hours, days = _clock_horizon(inputs)
+    location_name, latitude, longitude = _location(inputs)
     doc = inspect.getdoc(type(model)) or ""
     return ModelView(
         name=model.name,
         doc=doc.split("\n", 1)[0],
-        processes=tuple(inspect_process(process) for process in model.processes),
+        processes=tuple(inspect_process(process) for process in processes),
         states=tuple(inspect_state(state) for state in model.states),
         step_hours=step_hours,
         days=days,
@@ -167,16 +167,16 @@ def _variable_named(state: State, variable_name: str) -> Variable | None:
     return None
 
 
-def _clock_horizon(model: Model) -> tuple[int, int]:
-    for _, entity in model.inputs.all_entities():
+def _clock_horizon(inputs: Inputs) -> tuple[int, int]:
+    for _, entity in inputs.all_entities():
         if isinstance(entity, ClockInput):
             days = (entity.end.value - entity.start.value).days
             return int(entity.delta.value), int(days)
     return 0, 0
 
 
-def _location(model: Model) -> tuple[str, float, float]:
-    for _, entity in model.all_entities():
+def _location(inputs: Inputs) -> tuple[str, float, float]:
+    for _, entity in inputs.all_entities():
         if isinstance(entity, LocationInput):
             point = entity.centroid.value
             return entity.name, float(point.y), float(point.x)

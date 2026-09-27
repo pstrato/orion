@@ -8,10 +8,10 @@ from __future__ import annotations
 
 import importlib
 import inspect
-import pkgutil
 import re
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TypeGuard
 
 from orion.core.input import Input
@@ -44,16 +44,41 @@ class ProcessInputSpec:
     input_type: type[Input]
 
 
-def _iter_modules(package_name: str) -> list[str]:
+def iter_package_modules(package_name: str) -> tuple[str, ...]:
+    """Module names under a package, including namespace packages with no ``__init__.py``."""
     try:
         package = importlib.import_module(package_name)
     except Exception:  # noqa: BLE001 — package itself may be mid-refactor
-        return []
-    names = [package_name]
-    if hasattr(package, "__path__"):
-        for module in pkgutil.walk_packages(package.__path__, prefix=f"{package_name}."):
-            names.append(module.name)
-    return names
+        return ()
+    paths = getattr(package, "__path__", None)
+    if not paths:
+        return (package_name,)
+    names: list[str] = []
+    seen: set[str] = set()
+    for root in paths:
+        _collect_modules(Path(root), package_name, names, seen)
+    return tuple(names)
+
+
+def _collect_modules(directory: Path, prefix: str, names: list[str], seen: set[str]) -> None:
+    try:
+        children = sorted(directory.iterdir(), key=lambda path: path.name)
+    except OSError:
+        return
+    for child in children:
+        if child.name.startswith("_"):
+            continue
+        if child.is_dir():
+            _collect_modules(child, f"{prefix}.{child.name}", names, seen)
+        elif child.suffix == ".py":
+            module_name = f"{prefix}.{child.stem}"
+            if module_name not in seen:
+                seen.add(module_name)
+                names.append(module_name)
+
+
+def _iter_modules(package_name: str) -> list[str]:
+    return list(iter_package_modules(package_name))
 
 
 def _label_for(cls: type) -> str:

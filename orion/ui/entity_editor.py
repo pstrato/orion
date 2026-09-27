@@ -11,7 +11,7 @@ from datetime import date
 from nicegui import ui
 
 from orion.core.entity import Entity
-from orion.ui.reflect import EntityValue, InputField, input_field_label, list_entity_values, list_input_fields
+from orion.ui.reflect import EntityValue, InputField, input_field_label, list_entity_values, list_input_fields, slider_limits
 from orion.ui.theme import setting_row
 
 
@@ -30,6 +30,9 @@ def render_entity_editor(
 
 
 def _render_quantity_field(field: InputField, on_change: Callable[[str, float], None], *, live: bool) -> None:
+    if field.lower is not None and field.upper is not None:
+        _render_bounded_slider(field, on_change, live=live)
+        return
     with setting_row(input_field_label(field.name)):
         box = ui.number(value=field.value, format="%.4g").props("dense")
         hint = field.description
@@ -51,6 +54,48 @@ def _render_quantity_field(field: InputField, on_change: Callable[[str, float], 
         else:
             box.on("blur", commit)
             box.on("keydown.enter", commit)
+
+
+def _render_bounded_slider(field: InputField, on_change: Callable[[str, float], None], *, live: bool) -> None:
+    assert field.lower is not None and field.upper is not None
+    lower, upper = slider_limits(field.lower, field.upper, strict=field.strict)
+    shown = min(max(field.value, lower), upper)
+    hint = field.description
+    if field.unit:
+        hint = f"{hint} ({field.unit})" if hint else field.unit
+    with ui.row().classes("items-center gap-2 no-wrap"):
+        name = ui.label(input_field_label(field.name)).classes("text-xs text-gray-600 w-32 shrink-0")
+        if hint:
+            name.tooltip(hint)
+        box = ui.slider(min=lower, max=upper, step=_slider_step(lower, upper), value=shown).classes("w-40")
+        readout = ui.label(f"{shown:.2f}").classes("text-xs font-mono w-12 text-right")
+
+    sent = {"value": shown}
+
+    def show(_) -> None:
+        if box.value is None:
+            return
+        readout.set_text(f"{float(box.value):.2f}")
+
+    def commit(_) -> None:
+        if box.value is None:
+            return
+        next_value = float(box.value)
+        readout.set_text(f"{next_value:.2f}")
+        if next_value != sent["value"]:
+            sent["value"] = next_value
+            on_change(field.name, next_value)
+
+    box.on_value_change(show if not live else commit)
+    if not live:
+        box.on("change", commit)
+
+
+def _slider_step(lower: float, upper: float) -> float:
+    span = upper - lower
+    if span <= 2:
+        return 0.01
+    return span / 100
 
 
 def render_entity_values(entity: Entity, on_change: Callable[[str, object], None]) -> None:

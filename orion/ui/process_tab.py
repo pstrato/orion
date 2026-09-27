@@ -1,4 +1,4 @@
-"""Process lab tab: hierarchy tree, editable inputs, output explorer."""
+"""Process lab tab: pick a process type and experiment with an implementation."""
 
 from __future__ import annotations
 
@@ -7,19 +7,23 @@ from typing import Any
 import plotly.graph_objects as go
 from nicegui import ui
 
+from orion.ui.canopy_lab import render_light_interception_lab
 from orion.ui.entity_editor import render_entity_editor
 from orion.ui.process_explorer import (
     ParamSpec,
     ProcessInfo,
     SweepResult,
+    abstract_process_types,
     default_input_for,
     discover_process_classes,
     editable_fields_for,
-    get_process,
-    process_hierarchy_tree,
+    implementations_of,
+    is_light_interception,
+    playground_label,
     run_process_sweep,
 )
 from orion.ui.reflect import InputField
+from orion.ui.theme import setting_row
 
 
 def _explore_figure(result: SweepResult, output_key: str, x_param: str | None) -> go.Figure:
@@ -184,30 +188,68 @@ def _render_detail(detail, explore, info: ProcessInfo, selected: dict[str, Any])
 
 
 def render_process_tab(host) -> None:
-    """Render the process exploration workspace into host."""
-    host.clear()
-    processes = discover_process_classes()
-    tree_nodes = process_hierarchy_tree(processes)
-    selected: dict[str, Any] = {"info": None, "fields": (), "edits": {}, "result": None}
+    """Playground: pick an abstract process type, then an implementation to run."""
+    processes = tuple(discover_process_classes())
+    types = abstract_process_types(processes)
+    chosen = {"type": types[0].key if types else "", "implementation": ""}
 
-    with host:
-        with ui.row().classes("w-full gap-2 items-start flex-wrap"):
-            with ui.column().classes("w-64 min-w-56 gap-1"):
-                ui.label("Class hierarchy").classes("text-subtitle2").tooltip("Select a process, then edit inputs (value or range) and explore outputs.")
-                tree = ui.tree(tree_nodes, node_key="id", label_key="label", children_key="children").classes("w-full")
-                tree.props("dense default-expand-all")
+    def paint() -> None:
+        host.clear()
+        kind = next((item for item in types if item.key == chosen["type"]), None)
+        impls = implementations_of(kind, processes) if kind is not None else ()
+        if impls and chosen["implementation"] not in {item.key for item in impls}:
+            chosen["implementation"] = impls[0].key
+        impl = next((item for item in impls if item.key == chosen["implementation"]), None)
+        with host:
+            with ui.row().classes("w-full gap-3 items-start no-wrap"):
+                _render_type_list(types, chosen["type"], paint, chosen)
+                with ui.column().classes("flex-1 min-w-0 gap-2"):
+                    if kind is None:
+                        ui.label("No process types are available.").classes("text-xs text-gray-500")
+                        return
+                    if impl is None or not is_light_interception(impl):
+                        ui.label(playground_label(kind)).classes("text-subtitle1 font-medium").tooltip(kind.doc or kind.module)
+                    _render_implementation_select(impls, chosen, paint, wide=impl is not None and is_light_interception(impl))
+                    if impl is None:
+                        ui.label("This process type has no runnable implementation.").classes("text-amber-700")
+                        return
+                    if is_light_interception(impl):
+                        render_light_interception_lab(ui.column().classes("w-full"), impl)
+                        return
+                    detail = ui.column().classes("w-full gap-2")
+                    explore = ui.column().classes("w-full gap-2")
+                    _render_detail(detail, explore, impl, {"info": None, "fields": (), "edits": {}, "result": None})
 
-            detail = ui.column().classes("flex-1 min-w-64 gap-2")
-            explore = ui.column().classes("w-full gap-2")
+    paint()
 
-        def on_select(e) -> None:
-            key = e.value
-            if not key or str(key).startswith("group:"):
-                return
-            try:
-                info = get_process(str(key), processes)
-            except KeyError:
-                return
-            _render_detail(detail, explore, info, selected)
 
-        tree.on_select(on_select)
+def _render_type_list(types: tuple[ProcessInfo, ...], selected_key: str, paint, chosen: dict[str, str]) -> None:
+    with ui.column().classes("w-56 min-w-44 shrink-0 gap-1"):
+        ui.label("Processes").classes("text-subtitle2").tooltip("Abstract process types. Select one, then choose an implementation to experiment with.")
+        for info in types:
+            selected_cls = " orion-config-list-item--selected" if info.key == selected_key else ""
+
+            def select(key: str = info.key) -> None:
+                if key != chosen["type"]:
+                    chosen["type"] = key
+                    chosen["implementation"] = ""
+                    paint()
+
+            with ui.row().classes(f"orion-config-list-item items-center gap-2 no-wrap cursor-pointer w-full{selected_cls}").on("click", select):
+                ui.label(playground_label(info)).classes("text-xs truncate")
+
+
+def _render_implementation_select(impls: tuple[ProcessInfo, ...], chosen: dict[str, str], paint, *, wide: bool = False) -> None:
+    if not impls:
+        return
+    options = {info.key: playground_label(info) for info in impls}
+    with setting_row("Implementation", wide=wide):
+        box = ui.select(options, value=chosen["implementation"]).props("dense options-dense")
+
+    def on_implementation(_) -> None:
+        value = str(box.value or "")
+        if value and value != chosen["implementation"]:
+            chosen["implementation"] = value
+            paint()
+
+    box.on_value_change(on_implementation)

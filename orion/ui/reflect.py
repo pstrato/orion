@@ -16,13 +16,16 @@ from typing import TypeVar, cast
 
 import jax.numpy as jnp
 
-from orion.core.axis import Axis
+from orion.core.axis import Axis, step_axis
 from orion.core.constant import Constant
-from orion.core.constraint import Constraint
+from orion.core.constraint import Constraint, ConstraintGroup
 from orion.core.entity import Entity, EntityPath, EntityRelation
-from orion.core.model import Model
+from orion.core.input import Inputs
+from orion.core.model import Model, step
 from orion.core.parameter import Parameter
-from orion.core.quantity import Quantity
+from orion.core.process import Process
+from orion.core.quantity import BetweenConstraint, Quantity
+from orion.core.setting import Settings
 from orion.core.state import State
 from orion.core.variable import Variable
 
@@ -37,6 +40,9 @@ class InputField:
     value: float
     description: str
     unit: str | None
+    lower: float | None = None
+    upper: float | None = None
+    strict: bool = False
 
 
 def quantity_kind(entity: Entity) -> str:
@@ -173,15 +179,54 @@ def list_input_fields(inp: Entity) -> tuple[InputField, ...]:
         number = numeric_scalar(quantity.value)
         if number is None:
             continue
+        lower, upper, strict = _quantity_bounds(quantity)
         fields.append(
             InputField(
                 name=_edit_name(path, quantity),
                 value=number,
                 description=quantity.description,
                 unit=quantity.unit or None,
+                lower=lower,
+                upper=upper,
+                strict=strict,
             )
         )
     return tuple(fields)
+
+
+def slider_limits(lower: float, upper: float, *, strict: bool) -> tuple[float, float]:
+    """Inclusive slider ends. Exclusive constraints stay just inside the bounds."""
+    if not strict:
+        return lower, upper
+    pad = min(0.01, (upper - lower) * 0.02)
+    if pad <= 0:
+        return lower, upper
+    return lower + pad, upper - pad
+
+
+def _quantity_bounds(quantity: Quantity) -> tuple[float | None, float | None, bool]:
+    lower: float | None = None
+    upper: float | None = None
+    strict = False
+    for constraint in _iter_constraints(quantity.constraint):
+        if not isinstance(constraint, BetweenConstraint):
+            continue
+        if constraint.lower is not None:
+            lower = float(constraint.lower)
+        if constraint.upper is not None:
+            upper = float(constraint.upper)
+        strict = strict or bool(constraint.strict)
+    return lower, upper, strict
+
+
+def _iter_constraints(constraint: Constraint | None) -> Iterable[Constraint]:
+    if constraint is None:
+        return
+    if isinstance(constraint, ConstraintGroup):
+        for child in constraint.constraints:
+            yield from _iter_constraints(child)
+        return
+    yield constraint
 
 
 def input_field_label(name: str) -> str:
@@ -307,16 +352,16 @@ def _field_docs(cls: type) -> dict[str, str]:
     return docs
 
 
-def run_steps(model: Model, steps: int) -> tuple[Model, Model]:
+def run_steps(model: Model, settings: Settings, inputs: Inputs, processes: tuple[Process, ...], steps: int) -> tuple[Model, Model]:
     """Step ``model`` and stack variable values into a history model for plotting."""
     if steps < 1:
         return model, model
     current = model
     snapshots: list[Model] = []
     for _ in range(steps):
-        current = current.step()
+        current = step(current, settings, inputs, processes)
         snapshots.append(current)
-    return current, stack_variables(snapshots)
+    return current, replace(stack_variables(snapshots), axes=(step_axis(steps),))
 
 
 def stack_variables(snapshots: list[Model]) -> Model:

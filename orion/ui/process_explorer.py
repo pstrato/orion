@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import importlib
 import inspect
-import pkgutil
 from annotationlib import Format
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, is_dataclass, replace
@@ -13,13 +12,18 @@ from typing import Any, Literal, get_args, get_origin, get_type_hints
 import jax.numpy as jnp
 
 from orion.core.constant import Constant
-from orion.core.entity import Entity
+from orion.core.entity import Entity, entity
 from orion.core.input import Input
 from orion.core.parameter import Parameter
 from orion.core.process import Process
 from orion.core.quantity import Quantity
 from orion.core.state import State
 from orion.core.variable import Variable
+from orion.processes.crop.canopy_organ import CanopyOrgan
+from orion.processes.crop.crop import Crop
+from orion.processes.crop.organ import Organ
+from orion.processes.weather import Weather
+from orion.ui.catalog import iter_package_modules
 from orion.ui.reflect import format_path, numeric_scalar, owned_quantities, quantity_kind, set_quantity_value
 
 ParamMode = Literal["value", "range"]
@@ -75,12 +79,7 @@ class SweepResult:
 
 
 def _iter_modules(package_name: str) -> Iterable[str]:
-    package = importlib.import_module(package_name)
-    if not hasattr(package, "__path__"):
-        yield package_name
-        return
-    for module in pkgutil.walk_packages(package.__path__, prefix=f"{package_name}."):
-        yield module.name
+    return iter_package_modules(package_name)
 
 
 def _is_process_class(cls: type) -> bool:
@@ -158,6 +157,31 @@ def discover_process_classes() -> tuple[ProcessInfo, ...]:
     return tuple(sorted(found.values(), key=lambda p: p.key))
 
 
+def playground_label(info: ProcessInfo) -> str:
+    """Short name for a process type or implementation."""
+    stem = info.label.removesuffix("Process")
+    return stem or info.label
+
+
+def abstract_process_types(processes: Sequence[ProcessInfo] | None = None) -> tuple[ProcessInfo, ...]:
+    """Process types for the playground list.
+
+    A type is a discovered process that does not subclass another discovered
+    process. Concrete subclasses are implementations of that type.
+    """
+    processes = tuple(processes if processes is not None else discover_process_classes())
+    labels = {info.label for info in processes}
+    types = [info for info in processes if not any(base in labels and base != "Process" for base in info.bases)]
+    return tuple(sorted(types, key=lambda info: info.label.lower()))
+
+
+def implementations_of(kind: ProcessInfo, processes: Sequence[ProcessInfo] | None = None) -> tuple[ProcessInfo, ...]:
+    """Runnable implementations of an abstract process type, including itself when it runs."""
+    processes = tuple(processes if processes is not None else discover_process_classes())
+    impls = [info for info in processes if info.implemented and (info.key == kind.key or kind.label in info.bases)]
+    return tuple(sorted(impls, key=lambda info: info.label.lower()))
+
+
 def process_hierarchy_tree(processes: Sequence[ProcessInfo] | None = None) -> list[dict[str, Any]]:
     """Build a NiceGUI tree of processes grouped by inheritance and package."""
     processes = list(processes if processes is not None else discover_process_classes())
@@ -219,6 +243,137 @@ def _input_class_for_process(process_cls: type) -> type[Input] | None:
     return None
 
 
+def _is_light_interception(info: ProcessInfo) -> bool:
+    from orion.processes.crop.light_interception import LightInterceptionProcess
+
+    return isinstance(info.cls, type) and issubclass(info.cls, LightInterceptionProcess)
+
+
+def is_light_interception(info: ProcessInfo) -> bool:
+    """Whether the playground should open the canopy lab for this process."""
+    return _is_light_interception(info)
+
+
+@entity()
+class _OrganLabInput(Input):
+    """One organ in a light-interception experiment."""
+
+    k: Parameter
+    area_index: Parameter
+    bottom: Parameter
+    top: Parameter
+    shape: str = "rectangle"
+
+
+@entity()
+class LightInterceptionLabInput(Input):
+    """Canopy and incoming radiation for a light-interception experiment."""
+
+    leaves: _OrganLabInput
+    ears: _OrganLabInput
+    radiation: Parameter
+
+
+@entity()
+class _LabCrop(Crop):
+    """Crop specimen whose canopy is the lab's edited organs."""
+
+    above: tuple[CanopyOrgan, ...]
+
+    @property
+    def canopy(self) -> tuple[CanopyOrgan, ...]:
+        return self.above
+
+    @property
+    def organs(self) -> tuple[Organ, ...]:
+        return (self.roots, *self.above)
+
+
+def _organ_lab(name: str, *, k: float, area_index: float, bottom: float, top: float) -> _OrganLabInput:
+    from orion.core.parameter import param
+    from orion.core.quantity import between_0_1_exc
+
+    return _OrganLabInput(
+        name,
+        k=param("k", "1", k, "Extinction coefficient", constraint=between_0_1_exc),
+        area_index=param("area_index", "m^2/m^2", area_index, "Organ area per ground area"),
+        bottom=param("bottom", "m", bottom, "Height of the organ bottom"),
+        top=param("top", "m", top, "Height of the organ top"),
+    )
+
+
+def light_interception_lab_input() -> LightInterceptionLabInput:
+    """Default canopy: leaves fill 0–1 m, ears fill 1–2 m, 100 W/m² incoming."""
+    from orion.core.parameter import param
+
+    return LightInterceptionLabInput(
+        "canopy",
+        leaves=_organ_lab("leaves", k=0.5, area_index=2.0, bottom=0.0, top=1.0),
+        ears=_organ_lab("ears", k=0.5, area_index=1.0, bottom=1.0, top=2.0),
+        radiation=param("radiation", "W/m^2", 100.0, "Incoming shortwave radiation"),
+    )
+
+
+CANOPY_SHAPE_LABELS = {
+    "rectangle": "Rectangle",
+    "upward": "Wide at bottom",
+    "downward": "Wide at top",
+}
+
+
+def canopy_shape(name: str, organ: str):
+    """Vertical area distribution for one lab organ."""
+    from orion.processes.crop.shape import DownwardTriangle, Rectangle, UpwardTriangle
+
+    shapes = {"rectangle": Rectangle, "upward": UpwardTriangle, "downward": DownwardTriangle}
+    if name not in shapes:
+        raise ValueError(f"Unknown canopy shape {name!r}.")
+    return shapes[name](organ)
+
+
+def _organ_from_lab(organ_input: _OrganLabInput) -> CanopyOrgan:
+    from orion.core.constant import const
+    from orion.core.variable import var
+
+    return CanopyOrgan(
+        name=organ_input.name,
+        constraint=None,
+        top=var("top", "m", organ_input.top.value, "Organ top"),
+        bottom=var("bottom", "m", organ_input.bottom.value, "Organ bottom"),
+        area_index=var("area_index", "m^2/m^2", organ_input.area_index.value, "Area index"),
+        k=organ_input.k,
+        shape=const("shape", "1", canopy_shape(organ_input.shape, organ_input.name), "Vertical area distribution"),
+    )
+
+
+def _crop_from_lab(lab: LightInterceptionLabInput) -> _LabCrop:
+    from orion.processes.crop.roots import Roots
+
+    return _LabCrop("crop", None, Roots("roots", None), (_organ_from_lab(lab.leaves), _organ_from_lab(lab.ears)))
+
+
+def _weather_from_lab(lab: LightInterceptionLabInput) -> Weather:
+    import jax.numpy as jnp
+
+    from orion.core.axis import WITHIN_STEP
+    from orion.core.variable import var
+
+    radiation = jnp.asarray(lab.radiation.value, dtype=jnp.float32).reshape(-1)
+    return Weather(
+        name="weather",
+        constraint=None,
+        Ts=var("Ts", "°C", 15.0, "Air temperature"),
+        Ps=var("Ps", "kg/m^2", 0.0, "Precipitation"),
+        Rs=var("Rs", "W/m^2", radiation, "Shortwave radiation", axes=(WITHIN_STEP,)),
+    )
+
+
+def _argument_states(edited: Input) -> tuple[State, ...]:
+    if isinstance(edited, LightInterceptionLabInput):
+        return (_crop_from_lab(edited), _weather_from_lab(edited))
+    return _states_of(edited)
+
+
 def default_input_for(info: ProcessInfo) -> Input:
     """Input whose quantities the lab can edit. States are built from it, not edited."""
     from datetime import date
@@ -226,6 +381,8 @@ def default_input_for(info: ProcessInfo) -> Input:
     from orion.core.constant import const
     from orion.processes.clock import ClockInput
 
+    if _is_light_interception(info):
+        return light_interception_lab_input()
     if not isinstance(info.cls, type):
         raise TypeError(f"No input for {info.label}. States are read-only in the UI.")
     cls = _input_class_for_process(info.cls)
@@ -351,7 +508,7 @@ def _flatten_output_scalars(states: Sequence[State]) -> tuple[dict[str, float], 
     return values, units
 
 
-def run_process_sweep(info: ProcessInfo, params: Sequence[ParamSpec]) -> SweepResult:
+def run_process_sweep(info: ProcessInfo, params: Sequence[ParamSpec], *, base: Input | None = None) -> SweepResult:
     """Instantiate process, apply param grid to defaults, collect output scalars."""
     if not info.implemented:
         raise ValueError(f"{info.label} is abstract and cannot be run.")
@@ -359,7 +516,7 @@ def run_process_sweep(info: ProcessInfo, params: Sequence[ParamSpec]) -> SweepRe
     if not isinstance(process, Process):
         raise TypeError(f"{info.label} is not a Process")
 
-    sample = default_input_for(info)
+    sample = default_input_for(info) if base is None else base
     step = type(process).step
     hints = get_type_hints(step, format=Format.VALUE)
     arg_names = [name for name, annotation in hints.items() if name not in {"self", "return"} and isinstance(annotation, type) and issubclass(annotation, State)]
@@ -370,7 +527,7 @@ def run_process_sweep(info: ProcessInfo, params: Sequence[ParamSpec]) -> SweepRe
     for point in grid:
         overrides = {path: value for path, value in zip(paths, point, strict=True)}
         edited = _apply_input_overrides(sample, overrides)
-        produced = {type(state): state for state in _states_of(edited)}
+        produced = {type(state): state for state in _argument_states(edited)}
         args = [_state_for_argument(produced, hints[name]) for name in arg_names]
         result = process.step(*args)
         if isinstance(result, State):

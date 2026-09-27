@@ -6,7 +6,10 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
+from orion.core.input import Inputs
 from orion.core.model import Model
+from orion.core.process import Process
+from orion.core.setting import Settings
 from orion.ui.configuration import Configuration
 from orion.ui.reflect import run_steps
 from orion.ui.runs import INPUT_DATASETS, SimulationRun
@@ -43,6 +46,7 @@ def warm_model_key(state: Any, run: SimulationRun) -> tuple[object, ...]:
         run.name,
         configuration_compile_key(run.configuration),
         str(state.cache_path),
+        bool(state.settings.use_gpu),
         int(state.step_hours),
         state.input_mode,
         site_key,
@@ -75,5 +79,5 @@ class ConfigurationCompileCache:
     def sync(self, configurations: tuple[Configuration, ...]) -> None:
         self.fingerprint = tuple(configuration_compile_key(configuration) + (configuration.enabled, configuration.name) for configuration in configurations)
 
-    def simulate(self, built: Model, steps: int) -> tuple[Model, Model]:
-        return run_steps(built, steps)
+    def simulate(self, built: Model, settings: Settings, inputs: Inputs, processes: tuple[Process, ...], steps: int) -> tuple[Model, Model]:
+        return run_steps(built, settings, inputs, processes, steps)
