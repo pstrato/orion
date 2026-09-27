@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from datetime import timedelta
 from typing import Any
 
 import jax.numpy as jnp
+import jax_datetime as jdt
 import openmeteo_requests
 
 from orion.clients.http_cache import cached_session
@@ -54,7 +54,7 @@ def fetch_openmeteo_input(
     client: openmeteo_requests.Client | None,
 ):
     """Fetch hourly temperature, precipitation, and shortwave radiation."""
-    memory_key = (round(location.geometry.value.y, 5), round(location.geometry.value.x, 5), clock.start.value.isoformat(), clock.end.value.isoformat())
+    memory_key = (round(location.geometry.value.y, 5), round(location.geometry.value.x, 5), _iso_date(clock.start.value), _iso_date(clock.end.value))
     data = _hourly_memory.get(memory_key)
     if data is not None:
         return data
@@ -71,8 +71,8 @@ def fetch_openmeteo_input(
     params = {
         "latitude": location.geometry.value.y,
         "longitude": location.geometry.value.x,
-        "start_date": clock.start.value.isoformat(),
-        "end_date": (clock.end.value + timedelta(days=1)).isoformat(),
+        "start_date": _iso_date(clock.start.value),
+        "end_date": _iso_date(clock.end.value + jdt.to_timedelta(1, "D")),
         "hourly": list(OPENMETEO_HOURLY),
     }
     responses = openmeteo.weather_api(OPENMETEO_ARCHIVE_URL, params=params)
@@ -99,3 +99,7 @@ def fetch_openmeteo_input(
     )
     _hourly_memory[memory_key] = input
     return input
+
+
+def _iso_date(value: jdt.Datetime) -> str:
+    return value.to_pydatetime().date().isoformat()

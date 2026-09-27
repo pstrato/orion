@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import field
 from typing import TYPE_CHECKING
 
 from shapely import Point
@@ -25,6 +26,9 @@ class LocationInput(Input):
     geometry: Constant[Point]
     """Geometry of the location."""
 
+    altitude: Constant[float] = field(default_factory=lambda: const("altitude", "m", 100.0, "Altitude above sea level"))
+    """Altitude above sea level (m)."""
+
     @property
     def centroid(self) -> Constant[Point]:
         """Centroid of the location."""
@@ -37,8 +41,8 @@ class Inputs(Entity):
 
     - location: geographical location (point or polygon → batched members)
     - start / end / step: clock horizon (step size in hours)
-    - inputs: all model inputs (weather, soil, crop, light interception, and additional processes)
+    - inputs: all model inputs (weather, soil, crop, light interception, day length, and additional processes)
     """
 
     inputs: tuple[Input, ...]
-    """Model inputs: weather, soil, crop, light interception, and additional processes."""
+    """Model inputs: weather, soil, crop, light interception, day length, and additional processes."""

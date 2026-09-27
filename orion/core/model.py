@@ -87,7 +87,7 @@ def simulate_all(settings: Settings, inputs: tuple[Inputs, ...], processes: tupl
 
 
 def _compiled_run(settings: Settings, inputs: Inputs, processes: tuple[Process, ...], *, jit: bool, keep_history: bool) -> tuple[Model, Model | None]:
-    count = _clock_steps(inputs)
+    count = clock_steps(inputs)
     device = compute_device(settings.use_gpu)
 
     def run(settings: Settings, inputs: Inputs, processes: tuple[Process, ...]) -> tuple[Model, Model | None]:
@@ -110,7 +110,8 @@ def _compiled_batch(settings: Settings, inputs: tuple[Inputs, ...], processes: t
     if not inputs:
         raise ValueError("simulate_all requires inputs.")
     _require_same_constants(inputs)
-    count = _clock_steps(inputs[0])
+    _require_same_horizon(inputs)
+    count = clock_steps(inputs[0])
     batched = _stack_inputs(inputs)
     device = compute_device(settings.use_gpu)
 
@@ -174,19 +175,27 @@ def _reject_problems(entities: Sequence[Entity]) -> None:
         raise ValueError("\n".join(str(problem) for problem in found))
 
 
-def _clock_steps(inputs: Inputs) -> int:
+def clock_steps(inputs: Inputs) -> int:
     """Steps implied by the clock input: days × 24 / delta hours."""
     for _, item in inputs.all_entities(of_type=ClockInput):
         if isinstance(item, ClockInput):
-            days = (item.end.value - item.start.value).days
+            days = int((item.end.value - item.start.value).days)
             delta = int(item.delta.value)
             if delta <= 0:
                 raise ValueError("Step hours must be positive.")
-            count = int(days) * 24 // delta
+            count = days * 24 // delta
             if count < 1:
                 raise ValueError("Horizon is shorter than one step.")
             return count
     raise ValueError("Inputs have no clock.")
+
+
+def _require_same_horizon(groups: tuple[Inputs, ...]) -> None:
+    """A batch shares one scan length, so every inputs must cover the same number of steps."""
+    count = clock_steps(groups[0])
+    for group in groups[1:]:
+        if clock_steps(group) != count:
+            raise ValueError("simulate_all requires every inputs to have the same clock horizon.")
 
 
 def _require_same_constants(groups: tuple[Inputs, ...]) -> None:
