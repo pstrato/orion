@@ -8,8 +8,8 @@ model is holding. A second instance of the same concrete input or state type is 
 A parameter may name a base type. That matches the single concrete instance of a
 subclass. If more than one concrete type can be used, parsing fails.
 
-Invoked parameters cannot have defaults. A planned ``step`` call is indexes into
-the model state tuple. The return signature plans which of those indexes are written.
+Invoked parameters cannot have defaults. ``invoke_process_step`` resolves the
+call on each step. A base return type must match one concrete state.
 """
 
 from __future__ import annotations
@@ -19,8 +19,9 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from inspect import signature
 from typing import Any, NamedTuple, get_args, get_origin
 
-from orion.core.input import Input
+from orion.core.input import Input, Inputs
 from orion.core.process import Process
+from orion.core.setting import Settings
 from orion.core.state import State
 
 
@@ -72,8 +73,8 @@ def process_assignment(process: Process, states: Mapping[type[State], State]) ->
     return Assignment((_state_index(annotation, states, process.step),), False)
 
 
-def invoke_input_states(inputs: Sequence[Input], *extras: object) -> dict[type[State], State]:
-    """Invoke each input's ``states`` in order.
+def invoke_input_states(inputs: Sequence[Input], *extras: object) -> tuple[State, ...]:
+    """Invoke each ``input.states`` in order and return the states in creation order.
 
     Every concrete input is available immediately. A state becomes available only
     after the input that created it has been invoked.
@@ -84,16 +85,27 @@ def invoke_input_states(inputs: Sequence[Input], *extras: object) -> dict[type[S
         for state in _expect(invoke(item.states, available), State, item.states):
             _put(available, state)
             _put(states, state)
-    return states
+    return tuple(states.values())
 
 
-def invoke_process_step(process: Process, inputs: Iterable[Input], states: Mapping[type[State], State], *extras: object) -> dict[type[State], State]:
-    """Invoke ``process.step`` and replace each returned state of the same concrete type."""
-    available = _index([*extras, *inputs, *states.values()])
-    updated = dict(states)
-    for state in _expect(invoke(process.step, available), State, process.step):
-        updated[type(state)] = state
-    return updated
+def invoke_process_step(settings: Settings, inputs: Inputs, states: tuple[State, ...], process: Process) -> None | State | tuple[State, ...]:
+    """Invoke ``process.step`` with settings, inputs, and the current states.
+
+    The return annotation is checked against the states held now. The result is
+    ``None``, one state, or a tuple of states for the caller to write back.
+    """
+    held = {type(state): state for state in states}
+    process_assignment(process, held)
+    result = invoke(process.step, _index([settings, inputs, *_nested_inputs(inputs), *states]))
+    if result is None or isinstance(result, State):
+        return result
+    if isinstance(result, tuple) and all(isinstance(item, State) for item in result):
+        return result
+    raise TypeError(f"{_method_name(process.step)} must return None, a state, or a tuple of states, got {type(result).__name__}.")
+
+
+def _nested_inputs(inputs: Inputs) -> tuple[Input, ...]:
+    return tuple(item for _, item in inputs.all_entities(of_type=Input) if isinstance(item, Input))
 
 
 def _index(objects: Iterable[object]) -> dict[type, Any]:
