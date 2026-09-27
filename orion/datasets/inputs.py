@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from orion.core.constant import const
 from orion.core.input import Input, Inputs, LocationInput
+from orion.core.variable import var
 from orion.datasets.site_year import SiteYear
 from orion.processes.clock import ClockInput
 
@@ -13,8 +14,8 @@ def inputs_for_site_year(template: Inputs, site: SiteYear) -> Inputs:
     start, end = site.horizon()
     clock = ClockInput(
         "clock",
-        const("start", "isodate", start, description="Simulation start date"),
-        const("end", "isodate", end, description="Simulation end date"),
+        var("start", "isodate", start, description="Simulation start date"),
+        var("end", "isodate", end, description="Simulation end date"),
         const("delta", "hours", 24, description="Simulation delta step in hours"),
     )
     inputs: list[Input] = []
