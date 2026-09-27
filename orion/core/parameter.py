@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 import jax.numpy as jnp
 
 from orion.core.quantity import Quantity, value_as_array
+from orion.core.resource import Resource
 
 
 @entity()
@@ -29,6 +30,7 @@ class Parameter(Quantity[jnp.ndarray]):
             value,
             self.description,
             self.axes,
+            self.resource,
         )
 
 
@@ -39,6 +41,7 @@ def param(
     description: str = "",
     constraint: Constraint | None = None,
     axes: tuple[Axis, ...] = (),
+    resource: Resource | None = None,
 ) -> Parameter:
     """Create a parameter."""
-    return Parameter(name, constraint, unit, value_as_array(value), description, axes)
+    return Parameter(name, constraint, unit, value_as_array(value), description, axes, resource)

@@ -16,6 +16,7 @@ import jax.numpy as jnp
 import jax_datetime as jdt
 
 from orion.core.quantity import Quantity, value_as_array
+from orion.core.resource import Resource
 
 type JaxNumeric = jnp.ndarray
 type JaxDate = jdt.Datetime
@@ -34,6 +35,7 @@ class Variable[T: (JaxNumeric, JaxDate) = JaxNumeric](Quantity[T]):
             value,
             self.description,
             self.axes,
+            self.resource,
         )
 
 
@@ -45,6 +47,7 @@ def var(
     description: str = "",
     constraint: Constraint | None = None,
     axes: tuple[Axis, ...] = (),
+    resource: Resource | None = None,
 ) -> Variable[JaxDate]: ...
 
 
@@ -56,6 +59,7 @@ def var(
     description: str = "",
     constraint: Constraint | None = None,
     axes: tuple[Axis, ...] = (),
+    resource: Resource | None = None,
 ) -> Variable[JaxNumeric]: ...
 
 
@@ -66,11 +70,12 @@ def var(
     description: str = "",
     constraint: Constraint | None = None,
     axes: tuple[Axis, ...] = (),
+    resource: Resource | None = None,
 ) -> Variable[JaxNumeric] | Variable[JaxDate]:
     """Create a variable quantity. A Python date becomes a JAX datetime; anything else is numeric."""
     if isinstance(value, (date, datetime, jdt.Datetime)):
-        return Variable(name, constraint, unit, _as_jax_date(value), description, axes)
-    return Variable(name, constraint, unit, value_as_array(value), description, axes)
+        return Variable(name, constraint, unit, _as_jax_date(value), description, axes, resource)
+    return Variable(name, constraint, unit, value_as_array(value), description, axes, resource)
 
 
 def _as_jax_date(value: date | datetime | jdt.Datetime) -> jdt.Datetime:

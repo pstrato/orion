@@ -29,7 +29,7 @@ class WeatherInput(Input):
         return Weather(
             name="weather",
             constraint=None,
-            Ts=var("Ts", "°C", zeros, description="Air temperature within the step", axes=(WITHIN_STEP,), constraint=is_finite),
+            Ts=var("Ts", "°C", zeros, description="Air temperature within the step", axes=(WITHIN_STEP,), constraint=is_finite, resource="heat"),
             Ps=var(
                 "Ps",
                 "kg/m^2",
@@ -37,6 +37,7 @@ class WeatherInput(Input):
                 description="Precipitation within the step (kg/m²; 1 mm ≡ 1 kg/m²)",
                 axes=(WITHIN_STEP,),
                 constraint=is_non_negative + is_finite,
+                resource="water",
             ),
             Rs=var(
                 "Rs",
@@ -45,6 +46,7 @@ class WeatherInput(Input):
                 description="Shortwave radiation within the step",
                 axes=(WITHIN_STEP,),
                 constraint=is_non_negative + is_finite,
+                resource="light",
             ),
         )
 
@@ -62,11 +64,11 @@ class Weather(State):
 
     @property
     def Tmin(self):
-        return Variable("Minimum temperature", is_scalar, "°C", self.Ts.value.min(axis=-1), "Minimum air temperature.", ())
+        return Variable("Minimum temperature", is_scalar, "°C", self.Ts.value.min(axis=-1), "Minimum air temperature.", (), self.Ts.resource)
 
     @property
     def Tmax(self):
-        return Variable("Maximum temperature", is_scalar, "°C", self.Ts.value.max(axis=-1), "Maximum air temperature.", ())
+        return Variable("Maximum temperature", is_scalar, "°C", self.Ts.value.max(axis=-1), "Maximum air temperature.", (), self.Ts.resource)
 
     def Tsum(self, base: float | jnp.ndarray = 0):
         zero = jnp.zeros(())
@@ -76,15 +78,15 @@ class Weather(State):
             self.Ts.value,
         )[0]
 
-        return Variable("Temperature sum", is_scalar, "°C", sum, "Sum of air temperature.", ())
+        return Variable("Temperature sum", is_scalar, "°C", sum, "Sum of air temperature.", (), self.Ts.resource)
 
     @property
     def P(self):
-        return Variable("Precipitation", is_scalar, "kg/m^2", self.Ps.value.sum(axis=-1), "Total precipitation.", ())
+        return Variable("Precipitation", is_scalar, "kg/m^2", self.Ps.value.sum(axis=-1), "Total precipitation.", (), self.Ps.resource)
 
     @property
     def R(self):
-        return Variable("Radiation", is_scalar, "W/m^2", self.Rs.value.sum(axis=-1), "Total radiation.", ())
+        return Variable("Radiation", is_scalar, "W/m^2", self.Rs.value.sum(axis=-1), "Total radiation.", (), self.Rs.resource)
 
 
 @entity()

@@ -12,6 +12,7 @@ import jax.numpy as jnp
 from orion.core.axis import Axis
 from orion.core.constraint import ConstrainedEntity, Constraint, Problem
 from orion.core.entity import EntityPath, entity
+from orion.core.resource import Resource
 
 
 @entity()
@@ -29,6 +30,9 @@ class Quantity[T](ConstrainedEntity):
 
     axes: tuple[Axis, ...]
     """Ordered axes matching ``value`` rank (empty = scalar)."""
+
+    resource: Resource | None = None
+    """Resource this quantity represents, when the unit alone does not say so."""
 
 
 @entity()

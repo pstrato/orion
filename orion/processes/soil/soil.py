@@ -73,6 +73,7 @@ def make_soil_layer(
             organic_nitrogen,
             description="Organic nitrogen mass fraction",
             constraint=is_scalar + is_non_negative,
+            resource="nitrogen",
         ),
         water=var(
             "water",
@@ -80,6 +81,7 @@ def make_soil_layer(
             water,
             description="Soil water in this layer",
             constraint=is_scalar + is_non_negative,
+            resource="water",
         ),
         nitrogen=var(
             "nitrogen",
@@ -87,6 +89,7 @@ def make_soil_layer(
             nitrogen,
             description="Mineral nitrogen in this layer",
             constraint=is_scalar + is_non_negative,
+            resource="nitrogen",
         ),
         potassium=var(
             "potassium",
@@ -94,6 +97,7 @@ def make_soil_layer(
             potassium,
             description="Potassium in this layer",
             constraint=is_scalar + is_non_negative,
+            resource="potassium",
         ),
         phosphorus=var(
             "phosphorus",
@@ -101,6 +105,7 @@ def make_soil_layer(
             phosphorus,
             description="Phosphorus in this layer",
             constraint=is_scalar + is_non_negative,
+            resource="phosphorus",
         ),
         temperature=var(
             "temperature",
@@ -108,6 +113,7 @@ def make_soil_layer(
             temperature,
             description="Soil temperature in this layer",
             constraint=is_scalar,
+            resource="heat",
         ),
     )
 
