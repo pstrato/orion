@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from datetime import date, datetime
+from typing import TYPE_CHECKING, overload
 
 from orion.core.constraint import Constraint
 from orion.core.entity import entity
@@ -12,15 +13,19 @@ if TYPE_CHECKING:
     from orion.core.units import Unit
 
 import jax.numpy as jnp
+import jax_datetime as jdt
 
 from orion.core.quantity import Quantity, value_as_array
 
+type JaxNumeric = jnp.ndarray
+type JaxDate = jdt.Datetime
+
 
 @entity()
-class Variable(Quantity[jnp.ndarray]):
-    """A variable during simulation."""
+class Variable[T: (JaxNumeric, JaxDate) = JaxNumeric](Quantity[T]):
+    """A variable during simulation. Values are JAX numbers, or JAX datetimes."""
 
-    def set(self, value: jnp.ndarray) -> Variable:
+    def set(self, value: T) -> Variable[T]:
         """Return a new variable with the given value."""
         return Variable(
             self.name,
@@ -32,6 +37,18 @@ class Variable(Quantity[jnp.ndarray]):
         )
 
 
+@overload
+def var(
+    name: str,
+    unit: Unit,
+    value: date | datetime | JaxDate,
+    description: str = "",
+    constraint: Constraint | None = None,
+    axes: tuple[Axis, ...] = (),
+) -> Variable[JaxDate]: ...
+
+
+@overload
 def var(
     name: str,
     unit: Unit,
@@ -39,6 +56,26 @@ def var(
     description: str = "",
     constraint: Constraint | None = None,
     axes: tuple[Axis, ...] = (),
-) -> Variable:
-    """Create a variable quantity."""
+) -> Variable[JaxNumeric]: ...
+
+
+def var(
+    name: str,
+    unit: Unit,
+    value: jnp.ndarray | float | int | list[float] | list[int] | date | datetime | JaxDate | None = None,
+    description: str = "",
+    constraint: Constraint | None = None,
+    axes: tuple[Axis, ...] = (),
+) -> Variable[JaxNumeric] | Variable[JaxDate]:
+    """Create a variable quantity. A Python date becomes a JAX datetime; anything else is numeric."""
+    if isinstance(value, (date, datetime, jdt.Datetime)):
+        return Variable(name, constraint, unit, _as_jax_date(value), description, axes)
     return Variable(name, constraint, unit, value_as_array(value), description, axes)
+
+
+def _as_jax_date(value: date | datetime | jdt.Datetime) -> jdt.Datetime:
+    if isinstance(value, jdt.Datetime):
+        return value
+    if isinstance(value, datetime):
+        return jdt.to_datetime(value)
+    return jdt.to_datetime(value.isoformat())
