@@ -23,8 +23,9 @@ from orion.core.input import Input, Inputs, LocationInput
 from orion.core.model import Model, model
 from orion.core.process import Process
 from orion.core.setting import Settings
+from orion.core.variable import var
 from orion.processes.clock import ClockInput
-from orion.ui.catalog import configured_process_inputs, configured_weather_input, make_clock_input, unimplemented_process_labels
+from orion.ui.catalog import configured_day_length_input, configured_process_inputs, configured_weather_input, make_clock_input, unimplemented_process_labels
 from orion.ui.configuration import Configuration, default_configuration
 from orion.ui.configuration_tab import render_configuration_tab
 from orion.ui.device import apply_compute_device
@@ -100,6 +101,7 @@ class AppState:
     settings: Settings = field(default_factory=ui_settings)
     latitude: float = 51.5
     longitude: float = 0.1
+    altitude: float = 0.0
     location_name: str = "field"
     start: date = field(default_factory=lambda: date(DEFAULT_YEAR, 1, 1))
     end: date = field(default_factory=lambda: date(DEFAULT_YEAR + 1, 1, 1))
@@ -144,16 +146,17 @@ def build_inputs(state: AppState, configuration: Configuration) -> Inputs:
     if isinstance(clock, ClockInput):
         clock = replace(
             clock,
-            start=const("start", "isodate", state.start, "Simulation start date"),
-            end=const("end", "isodate", state.end, "Simulation end date"),
+            start=var("start", "isodate", state.start, "Simulation start date"),
+            end=var("end", "isodate", state.end, "Simulation end date"),
             delta=const("delta", "hours", int(state.step_hours), "Simulation delta step in hours"),
         )
     clock = apply_quantity_edits(clock, configuration.parameter_edits, "clock")
     location = LocationInput(
         name=state.location_name,
         geometry=const("geometry", "coordinate", Point(float(state.longitude), float(state.latitude)), "Location geometry"),
+        altitude=const("altitude", "m", float(state.altitude), "Altitude above sea level"),
     )
-    pieces: list[Input] = [clock, location, configured_weather_input(configuration), *configured_process_inputs(configuration)]
+    pieces: list[Input] = [clock, location, configured_weather_input(configuration), configured_day_length_input(configuration), *configured_process_inputs(configuration)]
     return Inputs(name="field input", inputs=tuple(pieces))
 
 
@@ -218,15 +221,19 @@ def load_simulation_weather(settings: Settings, inputs: Inputs) -> Inputs:
     return replace(inputs, inputs=pieces)
 
 
-def simulation_processes(_configuration: Configuration) -> tuple[Process, ...]:
+def simulation_processes(configuration: Configuration) -> tuple[Process, ...]:
     """Stateless processes applied on every step of this configuration.
 
-    Weather runs before the clock advances, so the hour window is the step just taken.
+    Day length and weather run before the clock advances, so they see the step just taken.
     """
     from orion.processes.clock import ClockProcess
+    from orion.processes.day_length import ApparentDayLengthInput, AstronomicalDayLengthInput
     from orion.processes.weather import WeatherProcess
 
-    return (WeatherProcess("weather"), ClockProcess("clock"))
+    day_length_input = configured_day_length_input(configuration)
+    if not isinstance(day_length_input, AstronomicalDayLengthInput | ApparentDayLengthInput):
+        raise TypeError(f"No day-length process for {type(day_length_input).__name__}.")
+    return (day_length_input.processes(), WeatherProcess("weather"), ClockProcess("clock"))
 
 
 def _block_ready(value: Model) -> Model:
@@ -242,6 +249,7 @@ def _open_quick_edit(state: AppState, refresh_all: Callable[[], None]) -> None:
         cache = ui.input("Cache path", value=str(state.cache_path)).classes("w-full")
         lat = ui.number("Latitude", value=state.latitude, format="%.4f", step=0.01)
         lon = ui.number("Longitude", value=state.longitude, format="%.4f", step=0.01)
+        alt = ui.number("Altitude (m)", value=state.altitude, format="%.1f", step=1)
         start = ui.input("Start date", value=state.start.isoformat()).props("type=date")
         end = ui.input("End date", value=state.end.isoformat()).props("type=date")
         step = ui.number("Step (hours)", value=state.step_hours, min=1, max=24, step=1)
@@ -250,6 +258,7 @@ def _open_quick_edit(state: AppState, refresh_all: Callable[[], None]) -> None:
             state.cache_path = Path(str(cache.value))
             state.latitude = float(lat.value or 0.0)
             state.longitude = float(lon.value or 0.0)
+            state.altitude = float(alt.value or 0.0)
             state.start = date.fromisoformat(str(start.value))
             state.end = date.fromisoformat(str(end.value))
             state.step_hours = int(step.value or 1)
@@ -444,6 +453,8 @@ def _render_custom_inputs(state: AppState) -> None:
         lat_input = ui.number(value=state.latitude, format="%.4f", step=0.01).props("dense")
     with setting_row("Longitude"):
         lon_input = ui.number(value=state.longitude, format="%.4f", step=0.01).props("dense")
+    with setting_row("Altitude"):
+        alt_input = ui.number(value=state.altitude, format="%.1f", step=1).props("dense suffix=m")
 
     leaflet = ui.leaflet(center=(state.latitude, state.longitude), zoom=6).classes("w-full h-40 md:h-48")
     marker = leaflet.marker(latlng=(state.latitude, state.longitude))
@@ -478,6 +489,7 @@ def _render_custom_inputs(state: AppState) -> None:
         state.step_hours = int(step_input.value or 1)
         state.latitude = float(lat_input.value or 0.0)
         state.longitude = float(lon_input.value or 0.0)
+        state.altitude = float(alt_input.value or 0.0)
         ui.notify("Inputs saved")
 
     ui.button("Save inputs", on_click=save_inputs).props("dense")

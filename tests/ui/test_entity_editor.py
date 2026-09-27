@@ -53,11 +53,12 @@ def test_entity_editor_edits_input_constants_including_clock_delta():
     from datetime import date
 
     from orion.core.constant import const
+    from orion.core.variable import var
 
     clock = ClockInput(
         name="clock",
-        start=const("start", "isodate", date(2024, 1, 1), "Simulation start date"),
-        end=const("end", "isodate", date(2024, 1, 11), "Simulation end date"),
+        start=var("start", "isodate", date(2024, 1, 1), "Simulation start date"),
+        end=var("end", "isodate", date(2024, 1, 11), "Simulation end date"),
         delta=const("delta", "hours", 3, "Simulation delta step in hours"),
     )
     names = [field.name for field in list_input_fields(clock)]

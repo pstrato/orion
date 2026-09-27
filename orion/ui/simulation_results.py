@@ -12,7 +12,7 @@ from nicegui import ui
 from nicegui.elements.row import Row
 
 from orion.core.model import Model
-from orion.ui.introspect import history_series
+from orion.ui.introspect import history_days, history_series
 from orion.ui.preferences import UiPreferences, merge_plot_order, move_plot_key
 from orion.ui.results_data import ScalarDatum, apply_unit_alternatives, collect_scalar_data, list_plot_keys
 from orion.ui.runs import SimulationRun
@@ -34,6 +34,7 @@ class VisiblePlot:
     key: str
     series: tuple[tuple[str, str, tuple[float, ...]], ...]
     unit: str
+    days: tuple[tuple[float, ...], ...]
 
 
 def results_layout_key(
@@ -55,10 +56,9 @@ def build_visible_plots(
 ) -> tuple[VisiblePlot, ...]:
     """Precompute overlay series for each plot key that has data.
 
-    ``step_hours`` is accepted for call-site symmetry with figure building; series
-    themselves are step-index based until turned into a figure.
+    ``step_hours`` is the clock step in hours. Series with a within-step axis
+    place each of those samples inside that same step.
     """
-    del step_hours  # series are in steps; figures apply step_hours when drawn
     tiles: list[VisiblePlot] = []
     alternatives = unit_alternatives or {}
     for key in plot_order:
@@ -69,6 +69,7 @@ def build_visible_plots(
                     key=key,
                     series=tuple((name, color, tuple(ys)) for name, color, ys in series),
                     unit=unit,
+                    days=tuple(tuple(row) for row in _days_for_key(results, runs, key, step_hours)),
                 )
             )
     return tuple(tiles)
@@ -137,11 +138,15 @@ def overlay_figure(
     series: Sequence[tuple[str, str, Sequence[float]]],
     unit: str,
     step_hours: int,
+    days: Sequence[Sequence[float]] | None = None,
 ) -> go.Figure:
     """One tile: traces use run colours; legend and titles live outside the figure."""
     fig = go.Figure()
-    for name, color, ys in series:
-        xs = [i * step_hours / 24 for i in range(len(ys))]
+    for index, (name, color, ys) in enumerate(series):
+        if days is None:
+            xs = [i * step_hours / 24 for i in range(len(ys))]
+        else:
+            xs = list(days[index])
         fig.add_trace(go.Scatter(x=list(xs), y=list(ys), mode="lines", name=name, showlegend=False, line=dict(width=1.5, color=color)))
     fig.update_layout(
         margin=dict(l=28, r=6, t=8, b=24),
@@ -232,6 +237,27 @@ def overlay_series_for_key(
     return series, unit
 
 
+def _days_for_key(
+    results: dict[str, tuple[Model, Model]],
+    runs: Sequence[SimulationRun],
+    key: str,
+    step_hours: int,
+) -> list[list[float]]:
+    """Day axis for each run that ``overlay_series_for_key`` includes, in that order."""
+    state_name, _, var_name = key.partition(".")
+    days: list[list[float]] = []
+    for run in runs:
+        if run.name not in results:
+            continue
+        _, history = results[run.name]
+        try:
+            history_series(history, state_name, var_name)
+        except KeyError:
+            continue
+        days.append(history_days(history, state_name, var_name, step_hours))
+    return days
+
+
 def render_plot_grid(
     host,
     results: dict[str, tuple[Model, Model]],
@@ -304,7 +330,7 @@ def render_plot_grid(
                         handle.tooltip(PLOT_REORDER_HINT)
                         ui.icon("drag_indicator").classes("text-gray-500 text-sm")
                         ui.label(tile.key).classes("text-xs font-medium")
-                    ui.plotly(overlay_figure(tile.series, tile.unit, step_hours)).classes("w-full")
+                    ui.plotly(overlay_figure(tile.series, tile.unit, step_hours, tile.days)).classes("w-full")
         grid_holder["grid"] = grid
         ui.timer(0.2, enable_sortable, once=True)
     return enable_sortable
@@ -378,7 +404,7 @@ class ResultsPanels:
         for tile in tiles:
             widget = self._plot_widgets.get(tile.key)
             if widget is not None:
-                widget.update_figure(overlay_figure(tile.series, tile.unit, step_hours))
+                widget.update_figure(overlay_figure(tile.series, tile.unit, step_hours, tile.days))
 
     def _remount(
         self,
@@ -464,7 +490,7 @@ class ResultsPanels:
                                         handle.tooltip(PLOT_REORDER_HINT)
                                         ui.icon("drag_indicator").classes("text-gray-500 text-sm")
                                         ui.label(tile.key).classes("text-xs font-medium")
-                                    plot = ui.plotly(overlay_figure(tile.series, tile.unit, step_hours)).classes("w-full")
+                                    plot = ui.plotly(overlay_figure(tile.series, tile.unit, step_hours, tile.days)).classes("w-full")
                                     self._plot_widgets[tile.key] = plot
                         grid_holder["grid"] = grid
                         ui.timer(0.2, enable_sortable, once=True)

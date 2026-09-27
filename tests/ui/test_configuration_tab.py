@@ -20,7 +20,18 @@ def test_adding_a_configuration_appends_it_and_selects_the_new_row():
     assert configs[1].soil == "SoilGrids"
     assert configs[1].crop == "Wheat"
     assert configs[1].light_interception == "Beer-Lambert"
+    assert configs[1].day_length == "Astronomical"
     assert configs[1].color == next_configuration_color((default_configuration(),))
+
+
+def test_simulation_uses_the_apparent_day_length_when_that_implementation_is_selected():
+    from orion.processes.day_length import ApparentDayLengthProcess, AstronomicalDayLengthProcess
+    from orion.ui.app import simulation_processes
+
+    astronomical = simulation_processes(default_configuration())
+    apparent = simulation_processes(default_configuration().with_providers(day_length="Apparent"))
+    assert isinstance(astronomical[0], AstronomicalDayLengthProcess)
+    assert isinstance(apparent[0], ApparentDayLengthProcess)
 
 
 def test_configuration_index_stays_inside_the_list():
@@ -35,7 +46,7 @@ def test_process_input_slots_follow_inputs_and_optional_processes():
     defaults = default_configuration()
     slots = process_input_slots(defaults)
     assert [slot.key for slot in slots] == [name for name, _label in provider_fields()]
-    assert [slot.label for slot in slots] == ["Clock", "Weather", "Soil", "Crop", "LightInterception"]
+    assert [slot.label for slot in slots] == ["Clock", "Weather", "Soil", "Crop", "LightInterception", "DayLength"]
     crop = next(slot for slot in slots if slot.key == "crop")
     assert crop.label == "Crop"
     assert crop.implementation == "Wheat"

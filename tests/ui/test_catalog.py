@@ -25,6 +25,16 @@ def test_catalog_skips_horizon_and_provider_inputs():
     assert "Soil" not in labels
 
 
+def test_day_length_providers_are_astronomical_and_apparent():
+    from orion.processes.day_length import ApparentDayLengthInput, AstronomicalDayLengthInput
+    from orion.ui.catalog import implementation_options, make_day_length_input
+
+    assert implementation_options("day_length")["Astronomical"] == "Astronomical"
+    assert implementation_options("day_length")["Apparent"] == "Apparent"
+    assert isinstance(make_day_length_input("Astronomical"), AstronomicalDayLengthInput)
+    assert isinstance(make_day_length_input("Apparent"), ApparentDayLengthInput)
+
+
 def test_light_interception_provider_is_beer_lambert():
     from orion.processes.crop.light_interception import BeerLambertLightInterceptionInput
     from orion.ui.catalog import implementation_options, make_light_interception_input

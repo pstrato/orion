@@ -128,6 +128,10 @@ DENSE_CSS = f"""
   user-select: none;
   touch-action: none;
 }}
+.orion-daylength-plot {{
+  height: calc(100vh - 200px);
+  min-height: 420px;
+}}
 .orion-canopy {{
   height: calc(100vh - 188px);
   min-height: 420px;

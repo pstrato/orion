@@ -17,6 +17,7 @@ from orion.core.input import Inputs
 from orion.core.model import simulate
 from orion.core.process import Process
 from orion.core.setting import Settings
+from orion.core.variable import var
 from orion.processes.clock import Clock, ClockInput
 
 _SEEN: list[object] = []
@@ -36,8 +37,8 @@ def _settings(*, use_gpu: bool) -> Settings:
 def _inputs() -> Inputs:
     clock = ClockInput(
         "clock",
-        const("start", "isodate", date(2024, 1, 1), description="start"),
-        const("end", "isodate", date(2024, 1, 2), description="end"),
+        var("start", "isodate", date(2024, 1, 1), description="start"),
+        var("end", "isodate", date(2024, 1, 2), description="end"),
         const("delta", "hours", 24, description="step"),
     )
     return Inputs("field", (clock,))

@@ -23,6 +23,7 @@ def configuration_compile_key(configuration: Configuration) -> tuple[object, ...
         configuration.soil,
         configuration.crop,
         configuration.light_interception,
+        configuration.day_length,
         configuration.parameter_edits,
         tuple((process.name, type(process).__name__) for process in configuration.processes),
     )
@@ -38,6 +39,7 @@ def warm_model_key(state: Any, run: SimulationRun) -> tuple[object, ...]:
         site_key = (
             float(state.latitude),
             float(state.longitude),
+            float(state.altitude),
             state.location_name,
             state.start.isoformat(),
             state.end.isoformat(),

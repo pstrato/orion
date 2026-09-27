@@ -20,6 +20,7 @@ def test_session_restores_settings_datasets_and_configurations(tmp_path: Path):
         settings=ui_settings(cache_path=tmp_path / "cache", validate_inputs=True, use_gpu=True),
         latitude=48.2,
         longitude=2.3,
+        altitude=412.0,
         location_name="plot",
         start=date(2021, 3, 1),
         end=date(2021, 8, 1),
@@ -55,6 +56,7 @@ def test_session_restores_settings_datasets_and_configurations(tmp_path: Path):
     assert loaded.runs == []
     assert loaded.latitude == 48.2
     assert loaded.longitude == 2.3
+    assert loaded.altitude == 412.0
     assert loaded.location_name == "plot"
     assert loaded.start == date(2021, 3, 1)
     assert loaded.end == date(2021, 8, 1)

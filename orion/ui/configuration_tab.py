@@ -72,6 +72,7 @@ def add_configuration(configurations: list[Configuration]) -> tuple[list[Configu
         soil=baseline.soil,
         crop=baseline.crop,
         light_interception=baseline.light_interception,
+        day_length=baseline.day_length,
     )
     next_list = [*configurations, created]
     return next_list, len(next_list) - 1

@@ -103,6 +103,8 @@ def replace_entity(root: Entity, path: EntityPath, updated: Entity) -> Entity:
     if not path:
         return updated
     relation, *rest = path
+    if not any(field.name == relation.name for field in fields(root)):
+        return root
     value = getattr(root, relation.name)
     if relation.index is None:
         child = replace_entity(value, tuple(rest), updated)
@@ -369,7 +371,7 @@ def stack_variables(snapshots: list[Model]) -> Model:
     template = snapshots[-1]
     stacked: Model = template
     for path, entity in template.all_entities(of_type=Variable):
-        if not isinstance(entity, Variable):
+        if not isinstance(entity, Variable) or not isinstance(entity.value, jnp.ndarray):
             continue
         series = []
         for snapshot in snapshots:

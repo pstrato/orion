@@ -14,7 +14,7 @@ import jax.numpy as jnp
 
 from orion.core.entity import Entity
 from orion.core.input import Inputs, LocationInput
-from orion.core.model import Model
+from orion.core.model import Model, axes_of
 from orion.core.process import Process
 from orion.core.quantity import Quantity
 from orion.core.state import State
@@ -116,14 +116,45 @@ def _plot_priority(state: State) -> int:
 
 def history_series(history: Model, state_name: str, variable_name: str) -> tuple[list[float], str]:
     """Extract a 1-D time series from stepped history for plotting."""
+    variable = _variable_named_in(history, state_name, variable_name)
+    arr = jnp.asarray(variable.value).reshape(-1)
+    return [float(item) for item in arr.tolist()], variable.unit
+
+
+def history_days(history: Model, state_name: str, variable_name: str, step_hours: int) -> list[float]:
+    """Day coordinate for each flattened sample.
+
+    A step-only series puts one point at the start of each step. A ``within_step``
+    axis holds one sample per hour of ``clock.delta``, so those samples share the
+    same day span as the other plots instead of counting as one day each.
+    """
+    variable = _variable_named_in(history, state_name, variable_name)
+    arr = jnp.asarray(variable.value)
+    axes = axes_of(history, variable)
+    within = next((index for index, item in enumerate(axes) if item.name == "within_step"), None)
+    if within is None or arr.ndim != len(axes) or int(arr.shape[within]) < 1:
+        return [index * step_hours / 24 for index in range(int(arr.size))]
+    within_size = int(arr.shape[within])
+    step = next((index for index, item in enumerate(axes) if item.name == "step"), None)
+    positions = jnp.unravel_index(jnp.arange(arr.size), arr.shape)
+    step_index = positions[step] if step is not None else jnp.zeros(arr.size, dtype=jnp.int32)
+    hour_index = positions[within]
+    axis = axes[within]
+    if len(axis.values) == within_size:
+        hours = jnp.asarray(tuple(axis.values), dtype=jnp.float32)[hour_index]
+    else:
+        hours = hour_index.astype(jnp.float32)
+    days = (step_index.astype(jnp.float32) * step_hours + hours * (step_hours / within_size)) / 24
+    return [float(item) for item in days.reshape(-1).tolist()]
+
+
+def _variable_named_in(history: Model, state_name: str, variable_name: str) -> Variable:
     for state in history.states:
         if state.name != state_name:
             continue
         variable = _variable_named(state, variable_name)
-        if variable is None:
-            continue
-        arr = jnp.asarray(variable.value).reshape(-1)
-        return [float(item) for item in arr.tolist()], variable.unit
+        if variable is not None:
+            return variable
     raise KeyError(f"{state_name}.{variable_name}")
 
 
@@ -135,6 +166,8 @@ def list_plottable_variables(history: Model) -> Iterable[tuple[str, str, str]]:
     states = sorted(history.states, key=lambda state: (_plot_priority(state), state.name))
     for state in states:
         for path, variable in owned_quantities(state, Variable):
+            if not isinstance(variable.value, jnp.ndarray):
+                continue
             yield state.name, format_path(path), variable.unit
 
 
@@ -170,8 +203,8 @@ def _variable_named(state: State, variable_name: str) -> Variable | None:
 def _clock_horizon(inputs: Inputs) -> tuple[int, int]:
     for _, entity in inputs.all_entities():
         if isinstance(entity, ClockInput):
-            days = (entity.end.value - entity.start.value).days
-            return int(entity.delta.value), int(days)
+            days = int((entity.end.value - entity.start.value).days)
+            return int(entity.delta.value), days
     return 0, 0
 
 

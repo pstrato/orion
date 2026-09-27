@@ -16,6 +16,7 @@ from orion.core.model import Model, model
 from orion.core.process import Process
 from orion.core.setting import Settings
 from orion.core.state import State
+from orion.core.variable import var
 from orion.processes.clock import ClockInput, ClockProcess
 from orion.processes.soil.soil import Soil, make_soil_layer
 from orion.ui.reflect import run_steps
@@ -53,8 +54,8 @@ def clock_model(tmp_path: Path):
     """Clock, location, and one soil layer. No network."""
     clock = ClockInput(
         name="clock",
-        start=const("start", "isodate", date(2024, 1, 1), "Simulation start date"),
-        end=const("end", "isodate", date(2024, 1, 11), "Simulation end date"),
+        start=var("start", "isodate", date(2024, 1, 1), "Simulation start date"),
+        end=var("end", "isodate", date(2024, 1, 11), "Simulation end date"),
         delta=const("delta", "hours", 3, "Simulation delta step in hours"),
     )
     location = LocationInput(

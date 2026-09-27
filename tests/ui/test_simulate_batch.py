@@ -26,8 +26,8 @@ _SETTINGS = Settings("settings", Path("."), False, False, False)
 def _clock(end: date) -> ClockInput:
     return ClockInput(
         "clock",
-        const("start", "isodate", date(2024, 1, 1), description="start"),
-        const("end", "isodate", end, description="end"),
+        var("start", "isodate", date(2024, 1, 1), description="start"),
+        var("end", "isodate", end, description="end"),
         const("delta", "hours", 24, description="step"),
     )
 

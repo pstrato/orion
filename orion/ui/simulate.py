@@ -10,7 +10,7 @@ import jax
 
 from orion.core.constant import Constant
 from orion.core.input import Inputs
-from orion.core.model import Model, simulate_all, validate
+from orion.core.model import Model, clock_steps, simulate_all, validate
 from orion.core.process import Process
 from orion.core.setting import Settings
 
@@ -58,7 +58,7 @@ def _same_batch(left: Job, right: Job) -> bool:
     right_inputs, right_processes = right
     if tuple((type(process), process.name) for process in left_processes) != tuple((type(process), process.name) for process in right_processes):
         return False
-    return _constants(left_inputs) == _constants(right_inputs)
+    return _constants(left_inputs) == _constants(right_inputs) and clock_steps(left_inputs) == clock_steps(right_inputs)
 
 
 def _constants(inputs: Inputs) -> tuple[Constant, ...]:

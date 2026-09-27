@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import jax.numpy as jnp
+import pytest
+
 from orion.ui.configuration import default_configuration
 from orion.ui.preferences import UiPreferences, load_preferences, merge_plot_order, move_plot_key, save_preferences
 from orion.ui.results_data import collect_scalar_data, list_plot_keys, plot_key
@@ -180,6 +183,52 @@ def test_plot_overlay_converts_values_when_unit_alternative_is_set(clock_model):
     series, unit = overlay_series_for_key(results, (run,), "clock.step", {"kg/kg": "%"})
     assert unit == "step"
     assert series[0][2] == [1.0, 2.0]
+
+
+def test_within_step_weather_shares_the_day_axis_of_a_step_plot():
+    """clock.delta samples inside a step stay inside that step, in days."""
+    from orion.core.axis import WITHIN_STEP, step_axis
+    from orion.core.model import Model
+    from orion.core.variable import var
+    from orion.processes.weather import Weather
+    from orion.ui.simulation_results import build_visible_plots, overlay_figure
+
+    steps, delta = 2, 24
+    values = jnp.arange(steps * delta, dtype=float).reshape(steps, delta)
+    weather = Weather(
+        "weather",
+        None,
+        var("Ts", "°C", values, axes=(WITHIN_STEP,)),
+        var("Ps", "kg/m^2", jnp.zeros((steps, delta)), axes=(WITHIN_STEP,)),
+        var("Rs", "W/m^2", jnp.zeros((steps, delta)), axes=(WITHIN_STEP,)),
+    )
+    history = Model("field", (weather,), (step_axis(steps),))
+    run = SimulationRun(name="field", color="#3D7FBF", configuration=default_configuration())
+    tiles = build_visible_plots({run.name: (history, history)}, (run,), ["weather.Ts"], delta)
+    figure = overlay_figure(tiles[0].series, tiles[0].unit, delta, tiles[0].days)
+    payload = figure.to_plotly_json()
+    xs = [float(item) for item in payload["data"][0]["x"]]
+
+    assert payload["layout"]["xaxis"]["title"]["text"] == "days"
+    assert len(xs) == steps * delta
+    assert xs[0] == pytest.approx(0)
+    assert xs[delta - 1] == pytest.approx((delta - 1) / 24)
+    assert xs[delta] == pytest.approx(delta / 24)
+    assert xs[-1] == pytest.approx((steps * delta - 1) / 24)
+
+
+def test_step_plots_stay_one_point_per_step_in_days(clock_model):
+    from orion.ui.simulation_results import build_visible_plots, overlay_figure
+
+    final, history = clock_model.run(2)
+    run = SimulationRun(name="field", color="#3D7FBF", configuration=default_configuration())
+    tiles = build_visible_plots({run.name: (final, history)}, (run,), ["clock.step"], 3)
+    figure = overlay_figure(tiles[0].series, tiles[0].unit, 3, tiles[0].days)
+    payload = figure.to_plotly_json()
+    xs = [float(item) for item in payload["data"][0]["x"]]
+
+    assert payload["layout"]["xaxis"]["title"]["text"] == "days"
+    assert xs == pytest.approx([0, 3 / 24])
 
 
 def test_plot_keys_list_soil_variables_before_clock(clock_model):

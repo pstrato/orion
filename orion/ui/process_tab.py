@@ -8,6 +8,7 @@ import plotly.graph_objects as go
 from nicegui import ui
 
 from orion.ui.canopy_lab import render_light_interception_lab
+from orion.ui.day_length_lab import render_day_length_lab
 from orion.ui.entity_editor import render_entity_editor
 from orion.ui.process_explorer import (
     ParamSpec,
@@ -18,6 +19,7 @@ from orion.ui.process_explorer import (
     discover_process_classes,
     editable_fields_for,
     implementations_of,
+    is_day_length,
     is_light_interception,
     playground_label,
     run_process_sweep,
@@ -207,14 +209,18 @@ def render_process_tab(host) -> None:
                     if kind is None:
                         ui.label("No process types are available.").classes("text-xs text-gray-500")
                         return
-                    if impl is None or not is_light_interception(impl):
+                    focused = impl is not None and (is_light_interception(impl) or is_day_length(impl))
+                    if not focused:
                         ui.label(playground_label(kind)).classes("text-subtitle1 font-medium").tooltip(kind.doc or kind.module)
-                    _render_implementation_select(impls, chosen, paint, wide=impl is not None and is_light_interception(impl))
+                    _render_implementation_select(impls, chosen, paint, wide=focused)
                     if impl is None:
                         ui.label("This process type has no runnable implementation.").classes("text-amber-700")
                         return
                     if is_light_interception(impl):
                         render_light_interception_lab(ui.column().classes("w-full"), impl)
+                        return
+                    if is_day_length(impl):
+                        render_day_length_lab(ui.column().classes("w-full"), impl)
                         return
                     detail = ui.column().classes("w-full gap-2")
                     explore = ui.column().classes("w-full gap-2")

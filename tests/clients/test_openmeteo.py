@@ -81,8 +81,8 @@ def _location() -> LocationInput:
 def _clock() -> ClockInput:
     return ClockInput(
         "clock",
-        const("start", "isodate", date(2024, 1, 1), description="start"),
-        const("end", "isodate", date(2024, 1, 2), description="end"),
+        var("start", "isodate", date(2024, 1, 1), description="start"),
+        var("end", "isodate", date(2024, 1, 2), description="end"),
         const("delta", "hours", 3, description="step length"),
     )
 

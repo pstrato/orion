@@ -29,6 +29,7 @@ def session_document(state: Any) -> dict[str, Any]:
         "settings": {item.path: _json_value(item.value) for item in list_entity_values(state.settings)},
         "latitude": float(state.latitude),
         "longitude": float(state.longitude),
+        "altitude": float(state.altitude),
         "location_name": str(state.location_name),
         "start": state.start.isoformat(),
         "end": state.end.isoformat(),
@@ -103,6 +104,8 @@ def _apply_place(state: Any, raw: dict[str, Any]) -> None:
         state.latitude = float(raw["latitude"])
     if "longitude" in raw:
         state.longitude = float(raw["longitude"])
+    if "altitude" in raw:
+        state.altitude = float(raw["altitude"])
     if "location_name" in raw:
         state.location_name = str(raw["location_name"])
     if "start" in raw:

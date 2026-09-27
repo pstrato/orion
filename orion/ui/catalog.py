@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import TypeGuard
 
 from orion.core.input import Input
-from orion.ui.configuration import CLOCK, CROP_WHEAT, LIGHT_INTERCEPTION_BEER_LAMBERT, SOIL_SOILGRIDS, WEATHER_OPEN_METEO, Configuration
+from orion.ui.configuration import CLOCK, CROP_WHEAT, DAY_LENGTH_APPARENT, DAY_LENGTH_ASTRONOMICAL, LIGHT_INTERCEPTION_BEER_LAMBERT, SOIL_SOILGRIDS, WEATHER_OPEN_METEO, Configuration
 from orion.ui.reflect import apply_quantity_edits
 
 ProcessInputFactory = Callable[[], Input]
@@ -28,6 +28,7 @@ _ROLE_CLASS_NAMES: dict[str, dict[str, str]] = {
     "soil": {"SoilGridInput": SOIL_SOILGRIDS},
     "crop": {"WheatInput": CROP_WHEAT},
     "light_interception": {"BeerLambertLightInterceptionInput": LIGHT_INTERCEPTION_BEER_LAMBERT},
+    "day_length": {"AstronomicalDayLengthInput": DAY_LENGTH_ASTRONOMICAL, "ApparentDayLengthInput": DAY_LENGTH_APPARENT},
 }
 _PROVIDER_CLASS_NAMES = {name for role in _ROLE_CLASS_NAMES.values() for name in role}
 _PROVIDER_PACKAGES = ("orion.clients", "orion.processes")
@@ -122,12 +123,13 @@ def _clock_input(name: str) -> Input:
     from datetime import date
 
     from orion.core.constant import const
+    from orion.core.variable import var
     from orion.processes.clock import ClockInput
 
     return ClockInput(
         name=name,
-        start=const("start", "isodate", date(2024, 1, 1), "Simulation start date"),
-        end=const("end", "isodate", date(2024, 1, 11), "Simulation end date"),
+        start=var("start", "isodate", date(2024, 1, 1), "Simulation start date"),
+        end=var("end", "isodate", date(2024, 1, 11), "Simulation end date"),
         delta=const("delta", "hours", 3, "Simulation delta step in hours"),
     )
 
@@ -167,8 +169,8 @@ def _is_input_class(cls: object) -> TypeGuard[type[Input]]:
 def discover_process_inputs() -> tuple[ProcessInputSpec, ...]:
     """Find optional process Input classes under ``orion.processes``.
 
-    Clock and location are the horizon. Weather, soil, crop, and light interception
-    are provider slots. Modules that fail to import are skipped.
+    Clock and location are the horizon. Weather, soil, crop, light interception,
+    and day length are provider slots. Modules that fail to import are skipped.
     """
     found: dict[str, ProcessInputSpec] = {}
     for module_name in _iter_modules("orion.processes"):
@@ -274,6 +276,10 @@ def light_interception_provider_options() -> dict[str, str]:
     return {spec.label: spec.label for spec in discover_provider_inputs("light_interception")}
 
 
+def day_length_provider_options() -> dict[str, str]:
+    return {spec.label: spec.label for spec in discover_provider_inputs("day_length")}
+
+
 def implementation_options(role: str) -> dict[str, str]:
     """Implementation labels for a provider slot."""
     return {spec.label: spec.label for spec in discover_provider_inputs(role)}
@@ -307,6 +313,10 @@ def make_light_interception_input(label: str) -> Input:
     return make_provider(label, "light_interception")
 
 
+def make_day_length_input(label: str) -> Input:
+    return make_provider(label, "day_length")
+
+
 def configured_clock_input(configuration: Configuration) -> Input:
     """Clock implementation with this configuration's quantity edits applied."""
     return apply_quantity_edits(make_clock_input(configuration.clock), configuration.parameter_edits, "clock")
@@ -330,6 +340,11 @@ def configured_crop_input(configuration: Configuration) -> Input:
 def configured_light_interception_input(configuration: Configuration) -> Input:
     """Light-interception provider with this configuration's quantity edits applied."""
     return apply_quantity_edits(make_light_interception_input(configuration.light_interception), configuration.parameter_edits, "light_interception")
+
+
+def configured_day_length_input(configuration: Configuration) -> Input:
+    """Day-length provider with this configuration's quantity edits applied."""
+    return apply_quantity_edits(make_day_length_input(configuration.day_length), configuration.parameter_edits, "day_length")
 
 
 def configured_process_inputs(configuration: Configuration) -> tuple[Input, ...]:

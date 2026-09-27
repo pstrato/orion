@@ -249,9 +249,20 @@ def _is_light_interception(info: ProcessInfo) -> bool:
     return isinstance(info.cls, type) and issubclass(info.cls, LightInterceptionProcess)
 
 
+def _is_day_length(info: ProcessInfo) -> bool:
+    from orion.processes.day_length import DayLengthProcess
+
+    return isinstance(info.cls, type) and issubclass(info.cls, DayLengthProcess)
+
+
 def is_light_interception(info: ProcessInfo) -> bool:
     """Whether the playground should open the canopy lab for this process."""
     return _is_light_interception(info)
+
+
+def is_day_length(info: ProcessInfo) -> bool:
+    """Whether the playground should open the day-length chart for this process."""
+    return _is_day_length(info)
 
 
 @entity()
@@ -299,6 +310,30 @@ def _organ_lab(name: str, *, k: float, area_index: float, bottom: float, top: fl
         area_index=param("area_index", "m^2/m^2", area_index, "Organ area per ground area"),
         bottom=param("bottom", "m", bottom, "Height of the organ bottom"),
         top=param("top", "m", top, "Height of the organ top"),
+    )
+
+
+@entity()
+class DayLengthLabInput(Input):
+    """Latitude, altitude, and day of year for a day-length experiment."""
+
+    latitude: Parameter
+    altitude: Parameter
+    doy: Parameter
+
+
+def day_length_lab_input() -> DayLengthLabInput:
+    """Default experiment: 52°N on day 172."""
+    from orion.core.parameter import param
+    from orion.core.quantity import BetweenConstraint
+
+    latitude_bounds = BetweenConstraint("between -90 and 90", lower=-90.0, upper=90.0, strict=False)
+    altitude_bounds = BetweenConstraint("between 0 and 5000", lower=0.0, upper=5000.0, strict=False)
+    return DayLengthLabInput(
+        "day_length",
+        latitude=param("latitude", "1", 52.0, "Latitude in degrees north", constraint=latitude_bounds),
+        altitude=param("altitude", "m", 0.0, "Altitude above sea level", constraint=altitude_bounds),
+        doy=param("doy", "days", 172.0, "Day of year"),
     )
 
 
@@ -368,10 +403,50 @@ def _weather_from_lab(lab: LightInterceptionLabInput) -> Weather:
     )
 
 
+def _clock_for_doy(doy: float):
+    from datetime import date, timedelta
+
+    from orion.core.constant import const
+    from orion.core.quantity import is_non_negative, is_scalar
+    from orion.core.variable import var
+    from orion.processes.clock import Clock
+
+    day = min(366, max(1, int(round(float(doy)))))
+    start = date(2024, 1, 1) + timedelta(days=day - 1)
+    return Clock(
+        name="clock",
+        constraint=None,
+        start=var("start", "isodate", start, "Simulation start date"),
+        delta=const("delta", "hours", 24, "Simulation delta step in hours"),
+        step=var("step", "step", 0, "Current simulation step index", constraint=is_scalar + is_non_negative),
+    )
+
+
+def _location_for_latitude(latitude: float, altitude: float = 0.0):
+    from shapely import Point
+
+    from orion.core.constant import const
+    from orion.core.input import LocationInput
+
+    return LocationInput(
+        name="location",
+        geometry=const("geometry", "coordinate", Point(0.0, float(latitude)), "Location geometry"),
+        altitude=const("altitude", "m", float(altitude), "Altitude above sea level"),
+    )
+
+
 def _argument_states(edited: Input) -> tuple[State, ...]:
     if isinstance(edited, LightInterceptionLabInput):
         return (_crop_from_lab(edited), _weather_from_lab(edited))
+    if isinstance(edited, DayLengthLabInput):
+        return (_clock_for_doy(float(edited.doy.value)),)
     return _states_of(edited)
+
+
+def _argument_inputs(edited: Input) -> tuple[Input, ...]:
+    if isinstance(edited, DayLengthLabInput):
+        return (_location_for_latitude(float(edited.latitude.value), float(edited.altitude.value)),)
+    return ()
 
 
 def default_input_for(info: ProcessInfo) -> Input:
@@ -379,10 +454,13 @@ def default_input_for(info: ProcessInfo) -> Input:
     from datetime import date
 
     from orion.core.constant import const
+    from orion.core.variable import var
     from orion.processes.clock import ClockInput
 
     if _is_light_interception(info):
         return light_interception_lab_input()
+    if _is_day_length(info):
+        return day_length_lab_input()
     if not isinstance(info.cls, type):
         raise TypeError(f"No input for {info.label}. States are read-only in the UI.")
     cls = _input_class_for_process(info.cls)
@@ -391,8 +469,8 @@ def default_input_for(info: ProcessInfo) -> Input:
     if cls is ClockInput:
         return ClockInput(
             name="clock",
-            start=const("start", "isodate", date(2024, 1, 1), "Simulation start date"),
-            end=const("end", "isodate", date(2024, 1, 11), "Simulation end date"),
+            start=var("start", "isodate", date(2024, 1, 1), "Simulation start date"),
+            end=var("end", "isodate", date(2024, 1, 11), "Simulation end date"),
             delta=const("delta", "hours", 3, "Simulation delta step in hours"),
         )
     return cls(info.label)
@@ -519,7 +597,7 @@ def run_process_sweep(info: ProcessInfo, params: Sequence[ParamSpec], *, base: I
     sample = default_input_for(info) if base is None else base
     step = type(process).step
     hints = get_type_hints(step, format=Format.VALUE)
-    arg_names = [name for name, annotation in hints.items() if name not in {"self", "return"} and isinstance(annotation, type) and issubclass(annotation, State)]
+    arg_names = [name for name, annotation in hints.items() if name not in {"self", "return"} and isinstance(annotation, type) and (issubclass(annotation, State) or issubclass(annotation, Input))]
 
     paths, grid = _param_grid(params)
     outputs: list[dict[str, float]] = []
@@ -527,8 +605,9 @@ def run_process_sweep(info: ProcessInfo, params: Sequence[ParamSpec], *, base: I
     for point in grid:
         overrides = {path: value for path, value in zip(paths, point, strict=True)}
         edited = _apply_input_overrides(sample, overrides)
-        produced = {type(state): state for state in _argument_states(edited)}
-        args = [_state_for_argument(produced, hints[name]) for name in arg_names]
+        produced_states = {type(state): state for state in _argument_states(edited)}
+        produced_inputs = {type(item): item for item in _argument_inputs(edited)}
+        args = [_argument_for(produced_states, produced_inputs, hints[name]) for name in arg_names]
         result = process.step(*args)
         if isinstance(result, State):
             result_states: tuple[State, ...] = (result,)
@@ -548,6 +627,21 @@ def get_process(key: str, processes: Sequence[ProcessInfo] | None = None) -> Pro
         if info.key == key:
             return info
     raise KeyError(key)
+
+
+def _argument_for(states: dict[type[State], State], inputs: dict[type[Input], Input], annotation: type) -> State | Input:
+    if issubclass(annotation, State):
+        return _state_for_argument(states, annotation)
+    return _input_for_argument(inputs, annotation)
+
+
+def _input_for_argument(produced: dict[type[Input], Input], annotation: type[Input]) -> Input:
+    if annotation in produced:
+        return produced[annotation]
+    matches = [item for cls, item in produced.items() if issubclass(cls, annotation)]
+    if len(matches) == 1:
+        return matches[0]
+    raise TypeError(f"No input of type {annotation.__name__} was built for the process.")
 
 
 def _state_for_argument(produced: dict[type[State], State], annotation: type[State]) -> State:

@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 import jax.numpy as jnp
@@ -27,8 +27,8 @@ _SETTINGS = Settings("settings", Path("."), False, False, False)
 def _clock() -> ClockInput:
     return ClockInput(
         "clock",
-        const("start", "isodate", date(2024, 1, 1), description="start"),
-        const("end", "isodate", date(2024, 1, 3), description="end"),
+        var("start", "isodate", date(2024, 1, 1), description="start"),
+        var("end", "isodate", date(2024, 1, 3), description="end"),
         const("delta", "hours", 24, description="step"),
     )
 
@@ -160,17 +160,40 @@ def test_history_of_several_inputs_is_indexed_by_inputs_then_step():
     assert _clock_state(history).step.value.shape == (2, 2)
 
 
+def test_simulate_all_keeps_each_inputs_own_start_date():
+    def group(start: date, name: str) -> Inputs:
+        return Inputs(
+            name,
+            (
+                ClockInput(
+                    "clock",
+                    var("start", "isodate", start, description="start"),
+                    var("end", "isodate", start + timedelta(days=2), description="end"),
+                    const("delta", "hours", 24, description="step"),
+                ),
+                Gain("gain", var("rate", "1", 1.0, description="rate")),
+            ),
+        )
+
+    early = date(2024, 1, 1)
+    late = date(2024, 6, 1)
+    finished, _history = simulate_all(_SETTINGS, (group(early, "early"), group(late, "late")), _processes())
+    got = _clock_state(finished).date.value.delta.days
+    expected = jnp.array([(early + timedelta(days=2) - date(1970, 1, 1)).days, (late + timedelta(days=2) - date(1970, 1, 1)).days])
+    assert jnp.array_equal(got, expected)
+
+
 def test_simulate_requires_a_clock():
     with pytest.raises(ValueError, match="no clock"):
         simulate(_SETTINGS, Inputs("bare", ()), ())
 
 
-def test_simulate_all_requires_the_same_constants():
+def test_simulate_all_requires_the_same_clock_horizon():
     short = ClockInput(
         "clock",
-        const("start", "isodate", date(2024, 1, 1), description="start"),
-        const("end", "isodate", date(2024, 1, 2), description="end"),
+        var("start", "isodate", date(2024, 1, 1), description="start"),
+        var("end", "isodate", date(2024, 1, 2), description="end"),
         const("delta", "hours", 24, description="step"),
     )
-    with pytest.raises(ValueError, match="same constants"):
+    with pytest.raises(ValueError, match="same clock horizon"):
         simulate_all(_SETTINGS, (_inputs(1.0, "slow"), Inputs("short", (short, Gain("gain", var("rate", "1", 3.0, description="rate"))))), _processes())

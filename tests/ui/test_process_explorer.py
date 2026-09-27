@@ -28,6 +28,32 @@ def test_discover_process_classes_includes_clock_and_weather():
     assert any(cls.__name__ == "Clock" for cls in clock.output_states)
 
 
+def test_playground_lists_day_length_and_its_astronomical_implementation():
+    processes = discover_process_classes()
+    day_length = next(item for item in abstract_process_types(processes) if item.label == "DayLengthProcess")
+    assert day_length.implemented is False
+    assert [item.label for item in implementations_of(day_length, processes)] == ["ApparentDayLengthProcess", "AstronomicalDayLengthProcess"]
+
+
+def test_day_length_experiment_lengthens_the_summer_day():
+    info = get_process("orion.processes.day_length.AstronomicalDayLengthProcess")
+    winter = run_process_sweep(
+        info,
+        [
+            ParamSpec(path="day_length.latitude", mode="value", value=52.0),
+            ParamSpec(path="day_length.doy", mode="value", value=355.0),
+        ],
+    )
+    summer = run_process_sweep(
+        info,
+        [
+            ParamSpec(path="day_length.latitude", mode="value", value=52.0),
+            ParamSpec(path="day_length.doy", mode="value", value=172.0),
+        ],
+    )
+    assert summer.outputs[0]["day_length.hours"] > winter.outputs[0]["day_length.hours"]
+
+
 def test_playground_lists_light_interception_and_its_beer_lambert_implementation():
     processes = discover_process_classes()
     light = next(item for item in abstract_process_types(processes) if item.label == "LightInterceptionProcess")

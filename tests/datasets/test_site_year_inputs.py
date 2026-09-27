@@ -9,10 +9,11 @@ import pytest
 from orion.core.constant import const
 from orion.core.entity import entity
 from orion.core.input import Input, Inputs, LocationInput
+from orion.core.variable import var
 from orion.datasets.convert import to_kg_per_m2
 from orion.datasets.events import fertiliser_event, protection_event, sowing_event
 from orion.datasets.inputs import inputs_for_site_year
-from orion.datasets.io import point_location
+from orion.datasets.io import location_from_row, point_location
 from orion.datasets.observations import make_observation
 from orion.datasets.site_year import SiteYear
 from orion.processes.clock import ClockInput
@@ -74,8 +75,8 @@ def test_inputs_for_site_year_use_dataset_location_and_horizon():
         (
             ClockInput(
                 "clock",
-                const("start", "isodate", date(2024, 1, 1), description="start"),
-                const("end", "isodate", date(2024, 1, 11), description="end"),
+                var("start", "isodate", date(2024, 1, 1), description="start"),
+                var("end", "isodate", date(2024, 1, 11), description="end"),
                 const("delta", "hours", 24, description="step"),
             ),
             point_location("field", 0.1, 51.5),
@@ -90,17 +91,25 @@ def test_inputs_for_site_year_use_dataset_location_and_horizon():
     assert built.name == site.name
     assert location.geometry.value.x == pytest.approx(11.702)
     assert location.geometry.value.y == pytest.approx(51.819)
-    assert clock.start.value == date(2018, 10, 12)
-    assert clock.end.value == date(2019, 7, 26)
+    assert clock.start.value.to_pydatetime().date() == date(2018, 10, 12)
+    assert clock.end.value.to_pydatetime().date() == date(2019, 7, 26)
     assert clock.delta.value == 24
     assert kept.name == "kept"
+
+
+def test_a_site_location_keeps_its_altitude():
+    location = point_location("westerfeld", 11.702, 51.819, 180.0)
+    assert float(location.altitude.value) == pytest.approx(180.0)
+    from_row = location_from_row({"latitude": "51.8", "longitude": "11.7", "elevation": "95"}, point_location("fallback", 0.0, 0.0, 10.0))
+    assert float(from_row.altitude.value) == pytest.approx(95.0)
+    assert float(point_location("sea", 0.0, 0.0).altitude.value) == pytest.approx(0.0)
 
 
 def test_inputs_for_site_year_adds_clock_and_location_when_the_template_has_neither():
     built = inputs_for_site_year(Inputs("bare", (KeptInput("kept"),)), _site())
     clock = built.inputs[0]
     assert isinstance(clock, ClockInput)
-    assert clock.start.value == date(2018, 10, 12)
-    assert clock.end.value == date(2019, 7, 26)
+    assert clock.start.value.to_pydatetime().date() == date(2018, 10, 12)
+    assert clock.end.value.to_pydatetime().date() == date(2019, 7, 26)
     assert any(isinstance(item, LocationInput) and item.name == "westerfeld" for item in built.inputs)
     assert any(isinstance(item, KeptInput) for item in built.inputs)
