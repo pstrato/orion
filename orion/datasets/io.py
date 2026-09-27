@@ -67,20 +67,26 @@ def yes(value: str) -> bool:
     return value.strip().lower() in {"yes", "y", "true", "1"}
 
 
-def point_location(name: str, longitude: float, latitude: float) -> LocationInput:
+def point_location(name: str, longitude: float, latitude: float, altitude: float = 100.0) -> LocationInput:
     """Location whose geometry is a single longitude/latitude point."""
-    return LocationInput(name, const("geometry", "coordinate", Point(longitude, latitude), description=name))
+    return LocationInput(
+        name,
+        const("geometry", "coordinate", Point(longitude, latitude), description=name),
+        altitude=const("altitude", "m", altitude, "Altitude above sea level"),
+    )
 
 
 def location_from_row(row: dict[str, str], fallback: LocationInput) -> LocationInput:
     lat = parse_float(cell(row, "latitude", "lat"))
     lon = parse_float(cell(row, "longitude", "lon", "long"))
+    altitude = parse_float(cell(row, "altitude", "elevation", "elev"))
     name = cell(row, "site", "name") or fallback.name
+    height = float(fallback.altitude.value) if altitude is None else altitude
     if lat is None or lon is None:
-        if name == fallback.name:
+        if name == fallback.name and altitude is None:
             return fallback
-        return point_location(name, fallback.geometry.value.x, fallback.geometry.value.y)
-    return point_location(name, lon, lat)
+        return point_location(name, fallback.geometry.value.x, fallback.geometry.value.y, height)
+    return point_location(name, lon, lat, 0.0 if altitude is None else altitude)
 
 
 def group_rows(rows: tuple[dict[str, str], ...], *keys: str) -> dict[tuple[str, ...], list[dict[str, str]]]:
