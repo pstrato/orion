@@ -20,7 +20,7 @@ from orion.core.quantity import Quantity
 from orion.core.state import State
 from orion.core.variable import Variable
 from orion.processes.clock import ClockInput
-from orion.ui.reflect import format_path, owned_quantities, quantity_kind, run_steps
+from orion.ui.reflect import format_path, on_within_step, owned_quantities, quantity_kind, run_steps
 
 __all__ = [
     "EntityView",
@@ -114,11 +114,11 @@ def _plot_priority(state: State) -> int:
     return 3
 
 
-def history_series(history: Model, state_name: str, variable_name: str) -> tuple[list[float], str]:
+def history_series(history: Model, state_name: str, variable_name: str) -> tuple[list[float], str, str | None]:
     """Extract a 1-D time series from stepped history for plotting."""
     variable = _variable_named_in(history, state_name, variable_name)
     arr = jnp.asarray(variable.value).reshape(-1)
-    return [float(item) for item in arr.tolist()], variable.unit
+    return [float(item) for item in arr.tolist()], variable.unit, variable.resource
 
 
 def history_days(history: Model, state_name: str, variable_name: str, step_hours: int) -> list[float]:
@@ -167,6 +167,8 @@ def list_plottable_variables(history: Model) -> Iterable[tuple[str, str, str]]:
     for state in states:
         for path, variable in owned_quantities(state, Variable):
             if not isinstance(variable.value, jnp.ndarray):
+                continue
+            if on_within_step(variable):
                 continue
             yield state.name, format_path(path), variable.unit
 

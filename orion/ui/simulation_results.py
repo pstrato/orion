@@ -223,10 +223,10 @@ def overlay_series_for_key(
             continue
         _, history = results[run.name]
         try:
-            ys, series_unit = history_series(history, state_name, var_name)
+            ys, series_unit, resource = history_series(history, state_name, var_name)
         except KeyError:
             continue
-        display = display_unit_for(display_class_for(key, series_unit), alternatives)
+        display = display_unit_for(display_class_for(series_unit, resource), alternatives)
         converted: list[float] = []
         out_unit = series_unit
         for y in ys:

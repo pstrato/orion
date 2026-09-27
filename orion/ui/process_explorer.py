@@ -24,7 +24,7 @@ from orion.processes.crop.crop import Crop
 from orion.processes.crop.organ import Organ
 from orion.processes.weather import Weather
 from orion.ui.catalog import iter_package_modules
-from orion.ui.reflect import format_path, numeric_scalar, owned_quantities, quantity_kind, set_quantity_value
+from orion.ui.reflect import format_path, numeric_scalar, on_within_step, owned_quantities, quantity_kind, set_quantity_value
 
 ParamMode = Literal["value", "range"]
 
@@ -397,9 +397,9 @@ def _weather_from_lab(lab: LightInterceptionLabInput) -> Weather:
     return Weather(
         name="weather",
         constraint=None,
-        Ts=var("Ts", "°C", 15.0, "Air temperature"),
-        Ps=var("Ps", "kg/m^2", 0.0, "Precipitation"),
-        Rs=var("Rs", "W/m^2", radiation, "Shortwave radiation", axes=(WITHIN_STEP,)),
+        Ts=var("Ts", "°C", 15.0, "Air temperature", resource="heat"),
+        Ps=var("Ps", "kg/m^2", 0.0, "Precipitation", resource="water"),
+        Rs=var("Rs", "W/m^2", radiation, "Shortwave radiation", axes=(WITHIN_STEP,), resource="light"),
     )
 
 
@@ -490,6 +490,8 @@ def list_scalar_fields(owner_name: str, entity: Entity) -> tuple[ScalarField, ..
     """Flatten numeric scalar quantities, including constants."""
     out: list[ScalarField] = []
     for path, quantity in owned_quantities(entity):
+        if on_within_step(quantity):
+            continue
         number = numeric_scalar(quantity.value)
         if number is None:
             continue

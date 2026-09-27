@@ -6,8 +6,11 @@
 from __future__ import annotations
 
 from datetime import date, timedelta
+from importlib import import_module
 from pathlib import Path
+from typing import Any, cast
 
+import jax
 import jax.numpy as jnp
 import pytest
 
@@ -181,6 +184,48 @@ def test_simulate_all_keeps_each_inputs_own_start_date():
     got = _clock_state(finished).date.value.delta.days
     expected = jnp.array([(early + timedelta(days=2) - date(1970, 1, 1)).days, (late + timedelta(days=2) - date(1970, 1, 1)).days])
     assert jnp.array_equal(got, expected)
+
+
+def _jit_cache_misses(run) -> int:
+    misses = 0
+    jax_util = cast(Any, import_module("jax._src.util"))
+    previous = jax_util.test_event_listener
+
+    def listen(name: str, *_args: object) -> None:
+        nonlocal misses
+        if name == "jit_cpp_cache_miss":
+            misses += 1
+        if previous is not None:
+            previous(name, *_args)
+
+    jax_util.test_event_listener = listen
+    try:
+        run()
+    finally:
+        jax_util.test_event_listener = previous
+    return misses
+
+
+def test_a_second_jit_simulation_reuses_the_compiled_program():
+    jax.clear_caches()
+    processes = _processes()
+    first = _jit_cache_misses(lambda: simulate(_SETTINGS, _inputs(1.0, "field"), processes, jit=True))
+    assert first >= 1
+    second = _jit_cache_misses(lambda: simulate(_SETTINGS, _inputs(4.0, "field"), processes, jit=True))
+    assert second == 0
+    longer = _jit_cache_misses(lambda: simulate(_SETTINGS, _inputs(1.0, "field"), processes, jit=True, keep_history=True))
+    assert longer >= 1
+
+
+def test_a_second_jit_batch_reuses_the_compiled_program():
+    jax.clear_caches()
+    processes = _processes()
+    batch = (_inputs(1.0, "slow"), _inputs(3.0, "fast"))
+    first = _jit_cache_misses(lambda: simulate_all(_SETTINGS, batch, processes, jit=True, keep_history=True))
+    assert first >= 1
+    again = (_inputs(2.0, "slow"), _inputs(5.0, "fast"))
+    second = _jit_cache_misses(lambda: simulate_all(_SETTINGS, again, processes, jit=True, keep_history=True))
+    assert second == 0
 
 
 def test_simulate_requires_a_clock():

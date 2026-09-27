@@ -76,7 +76,7 @@ def test_simulation_history_provides_monotonic_clock_series(clock_model):
     steps = 5
     _, history = clock_model.run(steps)
 
-    series, unit = history_series(history, "clock", "step")
+    series, unit, _resource = history_series(history, "clock", "step")
 
     assert unit == "step"
     assert len(series) == steps

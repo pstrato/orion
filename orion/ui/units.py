@@ -31,18 +31,10 @@ _TO_DISPLAY: dict[tuple[str, str], float] = {
     ("m", "mm"): 1000.0,
 }
 
-_WATER_LEAVES = frozenset({"water", "precipitation", "ps"})
 
-
-def is_water_quantity(path: str) -> bool:
-    leaf = path.rsplit(".", 1)[-1].lower()
-    if leaf in _WATER_LEAVES:
-        return True
-    return "irrigation" in path.lower() and leaf == "amount"
-
-
-def display_class_for(path: str, unit: str) -> str:
-    if unit == "kg/m^2" and is_water_quantity(path):
+def display_class_for(unit: str, resource: str | None = None) -> str:
+    """Display class for a quantity. Water stored as kg/m² uses the water setting."""
+    if resource == "water" and unit == "kg/m^2":
         return "water"
     return unit
 

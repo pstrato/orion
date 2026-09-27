@@ -13,7 +13,7 @@ from orion.core.entity import Entity
 from orion.core.model import Model
 from orion.core.quantity import Quantity
 from orion.core.state import State
-from orion.ui.reflect import format_path, owned_quantities
+from orion.ui.reflect import format_path, on_within_step, owned_quantities
 from orion.ui.units import convert_for_display, display_class_for, display_unit_for
 
 
@@ -25,6 +25,7 @@ class ScalarDatum:
     unit: str
     value: str
     description: str = ""
+    resource: str | None = None
 
 
 def _format_value(value: Any) -> str | None:
@@ -58,7 +59,7 @@ def apply_unit_alternatives(rows: Sequence[ScalarDatum], preferences: Mapping[st
         except ValueError:
             converted.append(row)
             continue
-        display = display_unit_for(display_class_for(row.name, row.unit), preferences)
+        display = display_unit_for(display_class_for(row.unit, row.resource), preferences)
         new_value, new_unit = convert_for_display(numeric, row.unit, display)
         if new_unit == row.unit and new_value == numeric:
             converted.append(row)
@@ -70,6 +71,8 @@ def apply_unit_alternatives(rows: Sequence[ScalarDatum], preferences: Mapping[st
 def _walk_scalars(prefix: str, entity: Entity) -> list[ScalarDatum]:
     rows: list[ScalarDatum] = []
     for path, quantity in owned_quantities(entity, Quantity):
+        if on_within_step(quantity):
+            continue
         formatted = _format_value(quantity.value)
         if formatted is None:
             continue
@@ -81,6 +84,7 @@ def _walk_scalars(prefix: str, entity: Entity) -> list[ScalarDatum]:
                 unit=quantity.unit or "",
                 value=formatted,
                 description=quantity.description or "",
+                resource=quantity.resource,
             )
         )
     return rows

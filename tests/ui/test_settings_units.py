@@ -52,8 +52,8 @@ def test_apply_unit_alternatives_uses_agronomic_defaults_when_prefs_empty():
     rows = (
         ScalarDatum(name="soil.layers.0.clay", unit="kg/kg", value="0.12", description="Clay"),
         ScalarDatum(name="crop.biomass", unit="kg/m^2", value="0.1", description="Biomass"),
-        ScalarDatum(name="soil.layers.0.water", unit="kg/m^2", value="0.1", description="Water"),
-        ScalarDatum(name="weather.Ps", unit="kg/m^2", value="2.5", description="Precipitation"),
+        ScalarDatum(name="soil.layers.0.water", unit="kg/m^2", value="0.1", description="Water", resource="water"),
+        ScalarDatum(name="weather.P", unit="kg/m^2", value="2.5", description="Precipitation", resource="water"),
         ScalarDatum(name="clock.step", unit="step", value="3", description="Step"),
     )
     converted = apply_unit_alternatives(rows, {})
@@ -68,10 +68,22 @@ def test_apply_unit_alternatives_uses_agronomic_defaults_when_prefs_empty():
     assert converted[4] == rows[4]
 
 
+def test_rainfall_is_shown_in_millimetres_because_it_is_water():
+    rows = (
+        ScalarDatum(name="weather.P", unit="kg/m^2", value="2.5", description="Precipitation", resource="water"),
+        ScalarDatum(name="weather.P", unit="kg/m^2", value="2.5", description="Precipitation"),
+    )
+    converted = apply_unit_alternatives(rows, {})
+    assert converted[0].unit == "mm"
+    assert converted[0].value == "2.5"
+    assert converted[1].unit == "kg/ha"
+    assert converted[1].value == "25000"
+
+
 def test_apply_unit_alternatives_honours_separate_water_preference():
     rows = (
         ScalarDatum(name="crop.biomass", unit="kg/m^2", value="0.1", description="Biomass"),
-        ScalarDatum(name="irrigation.amount", unit="kg/m^2", value="0.1", description="Irrigation"),
+        ScalarDatum(name="irrigation.amount", unit="kg/m^2", value="0.1", description="Irrigation", resource="water"),
     )
     prefs = UiPreferences(unit_alternatives={"kg/m^2": "t/ha", "water": "kg/ha"})
     converted = apply_unit_alternatives(rows, prefs.unit_alternatives)

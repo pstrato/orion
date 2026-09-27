@@ -163,6 +163,11 @@ def is_numeric_scalar(value: object) -> bool:
     return arr.shape == () or arr.size == 1
 
 
+def on_within_step(quantity: Quantity) -> bool:
+    """Whether the quantity is sampled inside a clock step and should stay off the UI."""
+    return any(axis.name == "within_step" for axis in quantity.axes)
+
+
 def numeric_scalar(value: object) -> float | None:
     if not is_numeric_scalar(value):
         return None
@@ -178,6 +183,8 @@ def list_input_fields(inp: Entity) -> tuple[InputField, ...]:
         raise TypeError("States are read-only in the UI. Edit the Input that creates them, including constants.")
     fields: list[InputField] = []
     for path, quantity in owned_quantities(inp):
+        if on_within_step(quantity):
+            continue
         number = numeric_scalar(quantity.value)
         if number is None:
             continue

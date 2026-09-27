@@ -102,7 +102,14 @@ def test_a_site_location_keeps_its_altitude():
     assert float(location.altitude.value) == pytest.approx(180.0)
     from_row = location_from_row({"latitude": "51.8", "longitude": "11.7", "elevation": "95"}, point_location("fallback", 0.0, 0.0, 10.0))
     assert float(from_row.altitude.value) == pytest.approx(95.0)
-    assert float(point_location("sea", 0.0, 0.0).altitude.value) == pytest.approx(0.0)
+    assert float(point_location("sea", 0.0, 0.0).altitude.value) == pytest.approx(100.0)
+
+
+def test_coordinates_without_an_elevation_keep_the_fallback_altitude():
+    from_row = location_from_row({"latitude": "51.8", "longitude": "11.7"}, point_location("fallback", 1.0, 2.0, 10.0))
+    assert from_row.geometry.value.x == pytest.approx(11.7)
+    assert from_row.geometry.value.y == pytest.approx(51.8)
+    assert float(from_row.altitude.value) == pytest.approx(10.0)
 
 
 def test_inputs_for_site_year_adds_clock_and_location_when_the_template_has_neither():

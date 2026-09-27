@@ -14,6 +14,26 @@ from orion.ui.runs import SimulationRun
 from orion.ui.simulation_results import overlay_series_for_key
 
 
+def test_precipitation_plot_is_labelled_in_millimetres():
+    from orion.core.model import Model
+    from orion.core.variable import var
+    from orion.processes.weather import Weather
+
+    weather = Weather(
+        name="weather",
+        constraint=None,
+        Ts=var("Ts", "°C", jnp.array([15.0, 16.0]), resource="heat"),
+        Ps=var("Ps", "kg/m^2", jnp.array([1.0, 2.5]), resource="water"),
+        Rs=var("Rs", "W/m^2", jnp.zeros(2), resource="light"),
+    )
+    history = Model("history", (weather,), ())
+    run = SimulationRun(name="field", color="#000", configuration=default_configuration())
+    series, unit = overlay_series_for_key({"field": (history, history)}, (run,), "weather.P", {})
+
+    assert unit == "mm"
+    assert series[0][2] == pytest.approx([3.5])
+
+
 def test_collect_scalar_data_exposes_name_unit_value_description(clock_model):
     final, _ = clock_model.run(3)
     rows = collect_scalar_data(final)
@@ -185,13 +205,15 @@ def test_plot_overlay_converts_values_when_unit_alternative_is_set(clock_model):
     assert series[0][2] == [1.0, 2.0]
 
 
-def test_within_step_weather_shares_the_day_axis_of_a_step_plot():
-    """clock.delta samples inside a step stay inside that step, in days."""
+def test_simulation_plots_skip_quantities_on_the_within_step_axis():
+    from datetime import date
+
     from orion.core.axis import WITHIN_STEP, step_axis
+    from orion.core.constant import const
     from orion.core.model import Model
     from orion.core.variable import var
+    from orion.processes.clock import Clock
     from orion.processes.weather import Weather
-    from orion.ui.simulation_results import build_visible_plots, overlay_figure
 
     steps, delta = 2, 24
     values = jnp.arange(steps * delta, dtype=float).reshape(steps, delta)
@@ -202,19 +224,20 @@ def test_within_step_weather_shares_the_day_axis_of_a_step_plot():
         var("Ps", "kg/m^2", jnp.zeros((steps, delta)), axes=(WITHIN_STEP,)),
         var("Rs", "W/m^2", jnp.zeros((steps, delta)), axes=(WITHIN_STEP,)),
     )
-    history = Model("field", (weather,), (step_axis(steps),))
-    run = SimulationRun(name="field", color="#3D7FBF", configuration=default_configuration())
-    tiles = build_visible_plots({run.name: (history, history)}, (run,), ["weather.Ts"], delta)
-    figure = overlay_figure(tiles[0].series, tiles[0].unit, delta, tiles[0].days)
-    payload = figure.to_plotly_json()
-    xs = [float(item) for item in payload["data"][0]["x"]]
+    clock = Clock(
+        "clock",
+        None,
+        var("start", "isodate", date(2024, 1, 1)),
+        const("delta", "hours", delta),
+        var("step", "step", jnp.arange(1, steps + 1)),
+    )
+    history = Model("field", (weather, clock), (step_axis(steps),))
 
-    assert payload["layout"]["xaxis"]["title"]["text"] == "days"
-    assert len(xs) == steps * delta
-    assert xs[0] == pytest.approx(0)
-    assert xs[delta - 1] == pytest.approx((delta - 1) / 24)
-    assert xs[delta] == pytest.approx(delta / 24)
-    assert xs[-1] == pytest.approx((steps * delta - 1) / 24)
+    keys = list_plot_keys(history)
+    assert "weather.Ts" not in keys
+    assert "weather.Ps" not in keys
+    assert "weather.Rs" not in keys
+    assert "clock.step" in keys
 
 
 def test_step_plots_stay_one_point_per_step_in_days(clock_model):
