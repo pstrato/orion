@@ -15,6 +15,9 @@ _VALUE_DATA_TYPE_NAMES = frozenset({"Variable", "Parameter"})
 
 
 def _is_orion_data_type(annotation: object) -> bool:
+    origin = get_origin(annotation)
+    if origin is not None:
+        annotation = origin
     if not isinstance(annotation, type):
         return False
     return any(base.__name__ in _DATA_TYPE_NAMES and str(getattr(base, "__module__", "")).startswith("orion.") for base in annotation.__mro__)
@@ -86,16 +89,14 @@ class Entity:
         dataclass(frozen=True)(cls)
 
     def direct_entities(self) -> Iterable[tuple[EntityRelation, Entity]]:
-        """Direct entities of this entity."""
-        for f in fields(self):
-            value = getattr(self, f.name)
-            if isinstance(value, tuple):
-                for i, item in enumerate(value):
-                    if not isinstance(item, Entity):
-                        continue
-                    yield EntityRelation(f.name, index=i), item
-            elif isinstance(value, Entity):
-                yield EntityRelation(f.name), value
+        """Direct child entities held in fields or returned by properties."""
+        field_names = {field.name for field in fields(self)}
+        for field in fields(self):
+            yield from _related_entities(field.name, getattr(self, field.name))
+        for name, prop in _properties(type(self)):
+            if name in field_names or not _may_return_entity(prop):
+                continue
+            yield from _related_entities(name, getattr(self, name))
 
     def all_entities(self, hierarchy: tuple[EntityRelation, ...] = (), of_type: type | tuple[type, ...] | None = None) -> Iterable[tuple[EntityPath, Entity]]:
         """All entities, including self."""
@@ -103,6 +104,69 @@ class Entity:
             yield hierarchy, self
         for relation, entity in self.direct_entities():
             yield from entity.all_entities((*hierarchy, relation), of_type)
+
+
+def _related_entities(name: str, value: object) -> Iterable[tuple[EntityRelation, Entity]]:
+    if isinstance(value, tuple):
+        for index, item in enumerate(value):
+            if isinstance(item, Entity):
+                yield EntityRelation(name, index=index), item
+    elif isinstance(value, Entity):
+        yield EntityRelation(name), value
+
+
+def _properties(cls: type) -> tuple[tuple[str, property], ...]:
+    """Properties declared on ``cls`` or a base, base classes first."""
+    found: list[tuple[str, property]] = []
+    seen: set[str] = set()
+    for base in reversed(cls.__mro__):
+        for name, attr in base.__dict__.items():
+            if name in seen or not isinstance(attr, property) or attr.fget is None:
+                continue
+            seen.add(name)
+            found.append((name, attr))
+    return tuple(found)
+
+
+def _may_return_entity(prop: property) -> bool:
+    """False when the property's return annotation cannot be an entity.
+
+    Missing annotations are read at runtime. A non-entity annotation is not read,
+    so a property such as a clock date is not evaluated on a batched value.
+    """
+    getter = prop.fget
+    if getter is None:
+        return False
+    try:
+        hints = get_type_hints(getter)
+    except Exception:  # noqa: BLE001 — an unresolvable annotation is checked at runtime
+        return True
+    annotation = hints.get("return")
+    if annotation is None:
+        return True
+    return _annotation_may_be_entity(annotation)
+
+
+def _annotation_may_be_entity(annotation: object) -> bool:
+    origin = get_origin(annotation)
+    if origin is tuple:
+        args = get_args(annotation)
+        if not args:
+            return False
+        if len(args) == 2 and args[1] is Ellipsis:
+            return _annotation_may_be_entity(args[0])
+        return any(_annotation_may_be_entity(arg) for arg in args)
+    if origin in {Union, types.UnionType}:
+        args = [arg for arg in get_args(annotation) if arg is not type(None)]
+        return bool(args) and any(_annotation_may_be_entity(arg) for arg in args)
+    if origin is not None:
+        annotation = origin
+    if isinstance(annotation, type):
+        try:
+            return issubclass(annotation, Entity)
+        except TypeError:
+            return False
+    return True
 
 
 T = TypeVar("T", bound=Entity)
