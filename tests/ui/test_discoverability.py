@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import pytest
 
-from orion.ui.introspect import history_series, inspect_model, list_plottable_variables, run_steps
+from orion.ui.introspect import history_series, inspect_model, list_plottable_variables
 from orion.ui.reflect import apply_quantity_edit
 
 
 def test_model_view_exposes_run_context_from_input(clock_model):
-    view = inspect_model(clock_model)
+    view = inspect_model(clock_model.model, clock_model.inputs, clock_model.processes)
 
     assert view.name == "clock only"
     assert view.days == 10
@@ -21,14 +21,14 @@ def test_model_view_exposes_run_context_from_input(clock_model):
 
 
 def test_model_view_discovers_processes_and_states_by_name(clock_model):
-    view = inspect_model(clock_model)
+    view = inspect_model(clock_model.model, clock_model.inputs, clock_model.processes)
 
     assert "clock" in [p.name for p in view.processes]
     assert "clock" in [s.name for s in view.states]
 
 
 def test_state_view_exposes_variables_with_units(clock_model):
-    view = inspect_model(clock_model)
+    view = inspect_model(clock_model.model, clock_model.inputs, clock_model.processes)
     clock_state = next(s for s in view.states if s.name == "clock")
     variables = {v.name: v for v in clock_state.fields if v.kind == "variable"}
 
@@ -60,14 +60,21 @@ def test_states_are_readonly(clock_model):
 
 
 def test_simulation_history_lists_plottable_variables(clock_model):
-    _, history = run_steps(clock_model, 5)
+    _, history = clock_model.run(5)
 
     assert ("clock", "step", "step") in list(list_plottable_variables(history))
 
 
+def test_simulation_history_exposes_the_steps_on_its_step_axis(clock_model):
+    final, history = clock_model.run(5)
+    assert final.axes == ()
+    assert [item.name for item in history.axes] == ["step"]
+    assert history.axes[0].values == (1, 2, 3, 4, 5)
+
+
 def test_simulation_history_provides_monotonic_clock_series(clock_model):
     steps = 5
-    _, history = run_steps(clock_model, steps)
+    _, history = clock_model.run(steps)
 
     series, unit = history_series(history, "clock", "step")
 
@@ -79,7 +86,7 @@ def test_simulation_history_provides_monotonic_clock_series(clock_model):
 
 
 def test_missing_history_variable_is_an_error(clock_model):
-    _, history = run_steps(clock_model, 2)
+    _, history = clock_model.run(2)
 
     with pytest.raises(KeyError):
         history_series(history, "clock", "not_a_variable")

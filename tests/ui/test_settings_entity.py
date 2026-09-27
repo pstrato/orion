@@ -27,6 +27,9 @@ def test_settings_view_lists_every_field_on_the_settings_entity(tmp_path: Path):
     assert by_name["validate_inputs"].description.startswith("Validate input")
     assert by_name["validate_initial_states"].value is False
     assert by_name["validate_simulation_states"].value is False
+    assert by_name["use_gpu"].value is False
+    assert by_name["use_gpu"].kind == "bool"
+    assert "gpu" in by_name["use_gpu"].description.lower()
 
 
 def test_nested_entity_fields_are_discovered_with_the_entity_walk():
@@ -48,7 +51,7 @@ def test_editing_a_settings_field_updates_the_model_settings(tmp_path: Path):
 
     settings = set_entity_value(ui_settings(cache_path=tmp_path), "validate_simulation_states", True)
     assert settings.validate_simulation_states is True
+    assert settings.cache_path == tmp_path
+    assert settings.validate_inputs is False
     built = build_model(AppState(settings=settings), default_configuration())
-    assert built.settings.validate_simulation_states is True
-    assert built.settings.cache_path == tmp_path
-    assert built.settings.validate_inputs is False
+    assert any(state.name == "clock" for state in built.states)

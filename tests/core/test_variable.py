@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from datetime import date
 from typing import cast
 
 import jax
 import jax.numpy as jnp
+import jax_datetime as jdt
 import pytest
 
 from orion.core.axis import axis
@@ -34,6 +36,18 @@ def test_replacing_a_variable_value_keeps_its_definition_and_constraint():
 def test_an_omitted_variable_value_is_zero():
     assert float(var("x", "m").value) == pytest.approx(0.0)
     assert var("x", "m").value.shape == ()
+
+
+def test_a_numeric_variable_holds_a_jax_array():
+    value = var("mass", "kg", 1.0, description="mass").value
+    assert isinstance(value, jnp.ndarray)
+    assert float(value) == pytest.approx(1.0)
+
+
+def test_a_date_variable_holds_a_jax_datetime():
+    value = var("start", "isodate", date(2024, 1, 1), description="start").value
+    assert isinstance(value, jdt.Datetime)
+    assert value.to_pydatetime().date() == date(2024, 1, 1)
 
 
 def test_a_variable_value_is_replaced_when_its_pytree_leaf_changes():

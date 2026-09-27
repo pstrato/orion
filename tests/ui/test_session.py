@@ -17,7 +17,7 @@ def test_session_restores_settings_datasets_and_configurations(tmp_path: Path):
     from orion.ui.app import ui_settings
 
     state = AppState(
-        settings=ui_settings(cache_path=tmp_path / "cache", validate_inputs=True),
+        settings=ui_settings(cache_path=tmp_path / "cache", validate_inputs=True, use_gpu=True),
         latitude=48.2,
         longitude=2.3,
         location_name="plot",
@@ -63,6 +63,7 @@ def test_session_restores_settings_datasets_and_configurations(tmp_path: Path):
     assert loaded.selected_dataset_names == ["year-a", "year-b"]
     assert loaded.selected_input_key == "soil"
     assert loaded.settings.validate_inputs is True
+    assert loaded.settings.use_gpu is True
     assert loaded.settings.cache_path == tmp_path / "cache"
     assert loaded.prefs.plot_order == ["weather.Ts"]
     assert loaded.prefs.unit_alternatives["kg/kg"] == "g/kg"

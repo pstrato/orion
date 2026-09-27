@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 
 from orion.ui.configuration import default_configuration
-from orion.ui.introspect import run_steps
 from orion.ui.preferences import UiPreferences, load_preferences, merge_plot_order, move_plot_key, save_preferences
 from orion.ui.results_data import collect_scalar_data, list_plot_keys, plot_key
 from orion.ui.runs import SimulationRun
@@ -13,7 +12,7 @@ from orion.ui.simulation_results import overlay_series_for_key
 
 
 def test_collect_scalar_data_exposes_name_unit_value_description(clock_model):
-    final, _ = run_steps(clock_model, 3)
+    final, _ = clock_model.run(3)
     rows = collect_scalar_data(final)
     by_name = {r.name: r for r in rows}
     assert "clock.step" in by_name
@@ -25,7 +24,7 @@ def test_collect_scalar_data_exposes_name_unit_value_description(clock_model):
 
 
 def test_collect_scalar_data_includes_nested_soil_scalars(clock_model):
-    rows = {r.name for r in collect_scalar_data(clock_model)}
+    rows = {r.name for r in collect_scalar_data(clock_model.model)}
     assert any(name.startswith("soil.layers.0.") for name in rows)
     assert "soil.layers.0.clay" in rows or any(".clay" in n for n in rows)
 
@@ -93,13 +92,13 @@ def test_successive_plot_tile_drags_compose():
 
 
 def test_list_plot_keys_from_history(clock_model):
-    _, history = run_steps(clock_model, 2)
+    _, history = clock_model.run(2)
     keys = list_plot_keys(history)
     assert plot_key("clock", "step") in keys
 
 
 def test_plot_overlay_labels_series_with_simulation_run_names(clock_model):
-    final, history = run_steps(clock_model, 2)
+    final, history = clock_model.run(2)
     run = SimulationRun(name="westerfeld:2018:intensive", color="#C45C26", configuration=default_configuration())
     results = {run.name: (final, history)}
     series, unit = overlay_series_for_key(results, (run,), "clock.step")
@@ -121,7 +120,7 @@ def test_overlay_legend_lists_each_dataset_colour_once_in_run_order():
 
 
 def test_overlay_series_reuse_the_same_colour_for_a_dataset_on_every_plot(clock_model):
-    final, history = run_steps(clock_model, 2)
+    final, history = clock_model.run(2)
     first = SimulationRun(name="site-a", color="#3D7FBF", configuration=default_configuration())
     second = SimulationRun(name="site-b", color="#C45C26", configuration=default_configuration())
     results = {first.name: (final, history), second.name: (final, history)}
@@ -174,7 +173,7 @@ def test_overlay_figure_stays_compact_without_a_duplicate_title():
 
 
 def test_plot_overlay_converts_values_when_unit_alternative_is_set(clock_model):
-    final, history = run_steps(clock_model, 2)
+    final, history = clock_model.run(2)
     run = SimulationRun(name="default", color="#C45C26", configuration=default_configuration())
     results = {run.name: (final, history)}
     # clock.step has no alternative; preference for kg/kg must not disturb it
@@ -184,7 +183,7 @@ def test_plot_overlay_converts_values_when_unit_alternative_is_set(clock_model):
 
 
 def test_plot_keys_list_soil_variables_before_clock(clock_model):
-    keys = list_plot_keys(clock_model)
+    keys = list_plot_keys(clock_model.model)
     soil_i = next(i for i, key in enumerate(keys) if key.startswith("soil."))
     clock_i = next(i for i, key in enumerate(keys) if key.startswith("clock."))
     assert soil_i < clock_i

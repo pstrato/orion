@@ -7,9 +7,11 @@ import pytest
 from orion.ui.process_explorer import (
     ParamSpec,
     ProcessInfo,
+    abstract_process_types,
     discover_process_classes,
     editable_fields_for,
     get_process,
+    implementations_of,
     process_hierarchy_tree,
     run_process_sweep,
 )
@@ -24,6 +26,72 @@ def test_discover_process_classes_includes_clock_and_weather():
     assert clock.implemented is True
     assert any(cls.__name__ == "Clock" for cls in clock.input_states)
     assert any(cls.__name__ == "Clock" for cls in clock.output_states)
+
+
+def test_playground_lists_light_interception_and_its_beer_lambert_implementation():
+    processes = discover_process_classes()
+    light = next(item for item in abstract_process_types(processes) if item.label == "LightInterceptionProcess")
+    assert light.implemented is False
+    assert [item.label for item in implementations_of(light, processes)] == ["BeerLambertLightInterceptionProcess"]
+
+
+def test_light_interception_experiment_changes_soil_light_with_extinction():
+    info = get_process("orion.processes.crop.light_interception.BeerLambertLightInterceptionProcess")
+    paths = {field.path for field in editable_fields_for(info)}
+    assert "canopy.leaves.k" in paths
+    assert "canopy.radiation" in paths
+
+    dim = run_process_sweep(info, [ParamSpec(path="canopy.leaves.k", mode="value", value=0.1)])
+    dense = run_process_sweep(info, [ParamSpec(path="canopy.leaves.k", mode="value", value=0.9)])
+
+    assert dense.outputs[0]["light_interception.soil"] < dim.outputs[0]["light_interception.soil"]
+
+
+def test_playground_lists_abstract_types_and_groups_implementations():
+    processes = discover_process_classes()
+    types = abstract_process_types(processes)
+    labels = {item.label for item in types}
+    assert "ClockProcess" in labels
+    assert "WeatherProcess" in labels
+    clock = next(item for item in types if item.label == "ClockProcess")
+    assert [item.label for item in implementations_of(clock, processes)] == ["ClockProcess"]
+
+    abstract = ProcessInfo(
+        key="orion.processes.crop.light_interception.LightInterceptionProcess",
+        cls=object,
+        label="LightInterceptionProcess",
+        module="orion.processes.crop.light_interception",
+        doc="",
+        bases=("Process",),
+        implemented=False,
+        input_states=(),
+        output_states=(),
+    )
+    concrete = ProcessInfo(
+        key="orion.processes.crop.light_interception.BeerLambertLightInterceptionProcess",
+        cls=object,
+        label="BeerLambertLightInterceptionProcess",
+        module="orion.processes.crop.light_interception",
+        doc="",
+        bases=("LightInterceptionProcess", "Process"),
+        implemented=True,
+        input_states=(),
+        output_states=(),
+    )
+    family = (abstract, concrete)
+    assert [item.label for item in abstract_process_types(family)] == ["LightInterceptionProcess"]
+    assert [item.label for item in implementations_of(abstract, family)] == ["BeerLambertLightInterceptionProcess"]
+
+
+def test_process_tab_selects_an_implementation_of_the_abstract_type():
+    import inspect
+
+    import orion.ui.process_tab as tab
+
+    source = inspect.getsource(tab)
+    assert "abstract_process_types" in source
+    assert "implementations_of" in source
+    assert "Implementation" in source
 
 
 def test_process_hierarchy_groups_clock_by_package():

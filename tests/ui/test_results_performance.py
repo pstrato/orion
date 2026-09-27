@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from orion.ui.configuration import default_configuration
-from orion.ui.introspect import run_steps
 from orion.ui.preferences import UiPreferences, merge_plot_order
 from orion.ui.results_data import list_plot_keys
 from orion.ui.runs import SimulationRun
@@ -15,8 +14,8 @@ from orion.ui.simulation_results import (
 
 
 def test_results_layout_key_stable_when_only_series_values_change(clock_model):
-    final_a, history_a = run_steps(clock_model, 2)
-    final_b, history_b = run_steps(clock_model, 4)
+    final_a, history_a = clock_model.run(2)
+    final_b, history_b = clock_model.run(4)
     run = SimulationRun(name="site", color="#C45C26", configuration=default_configuration())
     results_a = {run.name: (final_a, history_a)}
     results_b = {run.name: (final_b, history_b)}
@@ -25,7 +24,7 @@ def test_results_layout_key_stable_when_only_series_values_change(clock_model):
 
 
 def test_results_layout_key_changes_when_run_set_changes(clock_model):
-    final, history = run_steps(clock_model, 2)
+    final, history = clock_model.run(2)
     first = SimulationRun(name="a", color="#3D7FBF", configuration=default_configuration())
     second = SimulationRun(name="b", color="#C45C26", configuration=default_configuration())
     order = list_plot_keys(history)
@@ -35,7 +34,7 @@ def test_results_layout_key_changes_when_run_set_changes(clock_model):
 
 
 def test_build_visible_plots_precomputes_overlay_series(clock_model):
-    final, history = run_steps(clock_model, 2)
+    final, history = clock_model.run(2)
     run = SimulationRun(name="site", color="#C45C26", configuration=default_configuration())
     results = {run.name: (final, history)}
     tiles = build_visible_plots(results, (run,), list_plot_keys(history), 3, {})
@@ -56,7 +55,7 @@ def test_should_persist_plot_order_only_when_merged_order_changes():
 
 
 def test_precomputed_tiles_drive_layout_without_extra_keys(clock_model):
-    final, history = run_steps(clock_model, 2)
+    final, history = clock_model.run(2)
     run = SimulationRun(name="site", color="#C45C26", configuration=default_configuration())
     results = {run.name: (final, history)}
     tiles = build_visible_plots(results, (run,), list_plot_keys(history), 3, {})

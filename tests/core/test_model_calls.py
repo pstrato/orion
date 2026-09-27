@@ -1,4 +1,4 @@
-"""Behaviour: a model plans process calls once, then steps by state-tuple index."""
+"""Behaviour: a model holds states, and each step receives settings, inputs, and processes."""
 
 # Subclasses replace ``*args`` with the concrete parameters they require.
 # pyright: reportIncompatibleMethodOverride=false
@@ -10,17 +10,22 @@ from pathlib import Path
 import pytest
 
 from orion.core.input import Input, Inputs
-from orion.core.invoke import Assignment
-from orion.core.model import model
+from orion.core.model import model, step, validate
 from orion.core.process import Process
+from orion.core.quantity import is_positive
 from orion.core.setting import Settings
 from orion.core.state import State
+from orion.core.variable import Variable, var
 
 _SETTINGS = Settings("settings", Path("."), False, False, False)
 
 
-def _model(inputs: Inputs, processes: tuple[Process, ...] = (), settings: Settings = _SETTINGS):
-    return model("run", settings, inputs, processes)
+def _model(inputs: Inputs, settings: Settings = _SETTINGS):
+    return model("run", settings, inputs)
+
+
+def _step(inputs: Inputs, processes: tuple[Process, ...], settings: Settings = _SETTINGS):
+    return step(_model(inputs, settings), settings, inputs, processes)
 
 
 class Clock(State):
@@ -77,15 +82,12 @@ class UsesState(Process):
 
 
 def test_processes_run_in_the_order_they_are_given_and_state_positions_stay_fixed():
-    built = _model(Inputs("run", (ClockInput("clock-input"), ReadingInput("reading-input"))), (Tick("tick"), Tock("tock")))
+    inputs = Inputs("run", (ClockInput("clock-input"), ReadingInput("reading-input")))
+    built = _model(inputs)
     assert [type(state) for state in built.states] == [Clock, Reading]
-    assert [type(process) for process in built.processes] == [Tick, Tock]
-    assert built.process_arguments[0] == (0,)
-    assert built.process_arguments[1] == (0, 1)
 
-    stepped = built.step()
+    stepped = step(built, _SETTINGS, inputs, (Tick("tick"), Tock("tock")))
     assert stepped is not built
-    assert stepped.state_classes is built.state_classes
     assert [type(state) for state in stepped.states] == [Clock, Reading]
     assert stepped.states[0].name == "clock12"
     assert stepped.states[1].name == "reading2"
@@ -94,21 +96,22 @@ def test_processes_run_in_the_order_they_are_given_and_state_positions_stay_fixe
 
 
 def test_a_process_that_returns_nothing_leaves_the_state_tuple_unchanged():
-    built = _model(Inputs("run", (HoldInput("hold-input"),)), (Holds("hold"),))
-    assert built.process_assignments == (Assignment((), False),)
+    inputs = Inputs("run", (HoldInput("hold-input"),))
+    built = _model(inputs)
     clock = built.states[0]
-    stepped = built.step()
+    stepped = step(built, _SETTINGS, inputs, (Holds("hold"),))
     assert stepped.states == (clock,)
 
 
 def test_a_base_state_matches_the_only_concrete_state():
-    built = _model(Inputs("run", (OnlyClock("clock-input"),)), (UsesAnyState("uses"),))
-    assert built.step().states[0].name == "clock!"
+    inputs = Inputs("run", (OnlyClock("clock-input"),))
+    assert _step(inputs, (UsesAnyState("uses"),)).states[0].name == "clock!"
 
 
-def test_a_base_type_with_two_concrete_states_is_rejected_when_the_model_is_built():
+def test_a_base_type_with_two_concrete_states_is_rejected_when_the_process_steps():
+    inputs = Inputs("run", (ClockInput("clock-input"), ReadingInput("reading-input")))
     with pytest.raises(ValueError, match="more than one concrete type"):
-        _model(Inputs("run", (ClockInput("clock-input"), ReadingInput("reading-input"))), (UsesState("ambiguous"),))
+        _step(inputs, (UsesState("ambiguous"),))
 
 
 class Boxes(Process):
@@ -146,39 +149,34 @@ class UsesInput(Process):
         return None
 
 
-def test_return_assignments_are_planned_from_the_step_signature():
-    built = _model(Inputs("run", (ClockInput("clock-input"), ReadingInput("reading-input"))), (Tick("tick"), Tock("tock")))
-    assert built.process_assignments == (Assignment((0,), False), Assignment((0, 1), True))
+def test_a_one_state_tuple_replaces_that_state():
+    inputs = Inputs("run", (BoxInput("box-input"),))
+    assert _step(inputs, (Boxes("box"),)).states[0].name == "clockb"
 
 
-def test_a_one_state_tuple_is_unpacked_at_the_planned_index():
-    built = _model(Inputs("run", (BoxInput("box-input"),)), (Boxes("box"),))
-    assert built.process_assignments == (Assignment((0,), True),)
-    assert built.step().states[0].name == "clockb"
-
-
-def test_a_tuple_return_is_written_in_signature_order():
-    built = _model(Inputs("run", (ClockInput("clock-input"), ReadingInput("reading-input"))), (Tick("tick"), Tock("tock"), Reverse("reverse")))
-    assert built.process_assignments[2] == Assignment((1, 0), True)
-    stepped = built.step()
+def test_a_tuple_return_replaces_each_state_and_keeps_creation_order():
+    inputs = Inputs("run", (ClockInput("clock-input"), ReadingInput("reading-input")))
+    stepped = _step(inputs, (Tick("tick"), Tock("tock"), Reverse("reverse")))
     assert stepped.states[0].name == "clock12c"
     assert stepped.states[1].name == "reading2r"
 
 
 def test_a_base_return_type_matches_the_only_concrete_state():
-    built = _model(Inputs("run", (ReturnsStateInput("returns-input"),)), (ReturnsState("returns"),))
-    assert built.process_assignments == (Assignment((0,), False),)
-    assert built.step().states[0].name == "clock!"
+    inputs = Inputs("run", (ReturnsStateInput("returns-input"),))
+    assert _step(inputs, (ReturnsState("returns"),)).states[0].name == "clock!"
 
 
-def test_a_base_return_type_with_two_concrete_states_is_rejected_when_the_model_is_built():
+def test_a_base_return_type_with_two_concrete_states_is_rejected_when_the_process_steps():
+    inputs = Inputs("run", (ClockInput("clock-input"), ReadingInput("reading-input")))
     with pytest.raises(ValueError, match="more than one concrete type"):
-        _model(Inputs("run", (ClockInput("clock-input"), ReadingInput("reading-input"))), (ReturnsEither("either"),))
+        _step(inputs, (ReturnsEither("either"),))
 
 
-def test_a_step_argument_must_be_a_state():
-    with pytest.raises(TypeError, match="is not a state"):
-        _model(Inputs("run", (ClockInput("clock-input"),)), (UsesInput("uses"),))
+def test_a_process_can_require_an_input():
+    inputs = Inputs("run", (ClockInput("clock-input"),))
+    built = _model(inputs)
+    stepped = step(built, _SETTINGS, inputs, (UsesInput("uses"),))
+    assert stepped.states[0] is built.states[0]
 
 
 class LeafInput(Input):
@@ -203,24 +201,56 @@ def test_a_nested_input_is_available_and_is_invoked_with_its_parent():
     assert [type(state) for state in built.states] == [Clock, Reading]
     assert built.states[0].name == "leaf"
     assert built.states[1].name == "from-leaf"
-    assert built.processes == ()
 
 
 def test_inputs_and_settings_are_available_when_states_are_created():
     settings = Settings("settings", Path("cache"), False, False, False)
     box = Inputs("run", (NeedsContext("needs"),))
-    built = _model(box, (), settings)
-    assert built.settings is settings
+    built = model("run", settings, box)
     assert built.states[0].name == "run:settings"
 
 
-def test_a_step_does_not_parse_annotations_again(monkeypatch):
-    built = _model(Inputs("run", (ClockInput("clock-input"), ReadingInput("reading-input"))), (Tick("tick"), Tock("tock")))
+class Measured(Input):
+    level: Variable
 
-    def fail(*args, **kwargs):
-        raise AssertionError("annotations parsed during simulation")
 
-    monkeypatch.setattr("orion.core.invoke.get_annotations", fail)
-    monkeypatch.setattr("orion.core.model.get_annotations", fail, raising=False)
-    stepped = built.step()
-    assert stepped.states[0].name == "clock12"
+class Level(State):
+    amount: Variable
+
+
+class LevelInput(Input):
+    def states(self) -> Level:
+        return Level("level", None, var("amount", "m", 1.0, description="amount", constraint=is_positive))
+
+
+class BrokenLevelInput(Input):
+    def states(self) -> Level:
+        return Level("level", None, var("amount", "m", -1.0, description="amount", constraint=is_positive))
+
+
+class Breaks(Process):
+    def step(self, level: Level) -> Level:
+        return Level(level.name, None, var("amount", "m", -1.0, description="amount", constraint=is_positive))
+
+
+def test_validate_inputs_rejects_a_quantity_that_breaks_its_constraint():
+    level = var("level", "m", -1.0, description="level", constraint=is_positive)
+    settings = Settings("settings", Path("."), True, False, False)
+    with pytest.raises(ValueError, match="is positive"):
+        validate(settings, Inputs("run", (Measured("measured", level),)), ())
+
+
+def test_validate_initial_states_rejects_a_state_that_breaks_its_constraint():
+    settings = Settings("settings", Path("."), False, True, False)
+    with pytest.raises(ValueError, match="is positive"):
+        validate(settings, Inputs("run", (BrokenLevelInput("level"),)), ())
+
+
+def test_simulation_state_constraints_are_checked_when_validation_finishes():
+    settings = Settings("settings", Path("."), False, False, True)
+    inputs = Inputs("run", (LevelInput("level"),))
+    with pytest.raises(ValueError, match="is positive"):
+        validate(settings, inputs, (Breaks("breaks"),))
+    stepped = _step(inputs, (Breaks("breaks"),), settings)
+    level = next(state for state in stepped.states if isinstance(state, Level))
+    assert float(level.amount.value) == pytest.approx(-1.0)

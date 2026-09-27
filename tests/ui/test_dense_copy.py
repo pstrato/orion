@@ -12,7 +12,7 @@ HINT_PHRASES = (
     "Simulate enabled configurations at this location",
     "Defaults is readonly",
     "Uses Inputs plus each enabled configuration",
-    "Select a process, then edit inputs",
+    "Select one, then choose an implementation to experiment with",
     "Run the process to plot output variables",
 )
 

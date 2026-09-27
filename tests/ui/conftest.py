@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
@@ -11,11 +12,30 @@ from shapely import Point
 from orion.core.constant import const
 from orion.core.entity import entity
 from orion.core.input import Input, Inputs, LocationInput
-from orion.core.model import model
+from orion.core.model import Model, model
+from orion.core.process import Process
 from orion.core.setting import Settings
 from orion.core.state import State
 from orion.processes.clock import ClockInput, ClockProcess
 from orion.processes.soil.soil import Soil, make_soil_layer
+from orion.ui.reflect import run_steps
+
+
+@dataclass(frozen=True)
+class ClockRun:
+    """A clock model plus the settings, inputs, and processes each step needs."""
+
+    model: Model
+    settings: Settings
+    inputs: Inputs
+    processes: tuple[Process, ...]
+
+    @property
+    def states(self):
+        return self.model.states
+
+    def run(self, steps: int):
+        return run_steps(self.model, self.settings, self.inputs, self.processes, steps)
 
 
 @entity()
@@ -42,4 +62,6 @@ def clock_model(tmp_path: Path):
         geometry=const("geometry", "coordinate", Point(0.1, 51.5), "Parcel geometry"),
     )
     settings = Settings(name="test", cache_path=tmp_path, validate_inputs=False, validate_initial_states=False, validate_simulation_states=False)
-    return model("clock only", settings, Inputs(name="field", inputs=(clock, location, FixtureSoilInput("stub soil"))), (ClockProcess("clock"),))
+    inputs = Inputs(name="field", inputs=(clock, location, FixtureSoilInput("stub soil")))
+    processes = (ClockProcess("clock"),)
+    return ClockRun(model("clock only", settings, inputs), settings, inputs, processes)

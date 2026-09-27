@@ -25,6 +25,14 @@ def test_catalog_skips_horizon_and_provider_inputs():
     assert "Soil" not in labels
 
 
+def test_light_interception_provider_is_beer_lambert():
+    from orion.processes.crop.light_interception import BeerLambertLightInterceptionInput
+    from orion.ui.catalog import implementation_options, make_light_interception_input
+
+    assert implementation_options("light_interception")["Beer-Lambert"] == "Beer-Lambert"
+    assert isinstance(make_light_interception_input("Beer-Lambert"), BeerLambertLightInterceptionInput)
+
+
 def test_provider_catalog_lists_importable_weather_and_soil():
     from orion.processes.clock import ClockInput
     from orion.ui.catalog import implementation_options, make_clock_input
