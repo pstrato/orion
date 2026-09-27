@@ -18,3 +18,6 @@ class Settings(Entity):
 
     validate_simulation_states: bool
     """Validate simulation states."""
+
+    use_gpu: bool = False
+    """Run simulations on a GPU."""
