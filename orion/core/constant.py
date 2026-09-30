@@ -9,9 +9,9 @@ if TYPE_CHECKING:
     from orion.core.units import Unit
 
 from orion.core.constraint import Constraint
+from orion.core.dimension import Dimension
 from orion.core.entity import entity
 from orion.core.quantity import Quantity
-from orion.core.resource import Resource
 
 
 @entity()
@@ -26,8 +26,8 @@ def const[T](
     description: str = "",
     constraint: Constraint | None = None,
     axes: tuple[Axis, ...] = (),
-    resource: Resource | None = None,
+    dimension: Dimension | None = None,
 ) -> Constant[T]:
     """Create a constant quantity."""
-    quantity = Constant[T](name, constraint, unit, value, description, axes, resource)
+    quantity = Constant[T](name, constraint, unit, value, description, axes, dimension)
     return quantity

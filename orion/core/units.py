@@ -8,7 +8,7 @@ Orion quantity units for the main physical classes:
 - depth / length: ``m``
 - mass density (bulk density, root density): ``kg/m^3``
 - area density (canopy leaf/stem/ear density): ``m^2/m^3``
-- dimensionless coefficients (extinction k): ``1``
+- unitless coefficients (extinction k): ``unitless``
 - concentrations (mass fractions): ``kg/kg`` (kg thing / kg medium)
 
 Clients and datasets convert published units into these before building states.
@@ -23,7 +23,7 @@ Unit = Literal[
     "kg/m^2",
     "kg/m^3",
     "m^2/m^3",
-    "1",
+    "unitless",
     "kg/kg",
     "cmolc/kg",
     "pH",
@@ -32,7 +32,6 @@ Unit = Literal[
     "step",
     "s",
     "isodate",
-    "dimensionless",
     "coordinate",
     "seeds/m^2",
     "hours",

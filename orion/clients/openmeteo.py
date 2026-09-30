@@ -79,7 +79,7 @@ def fetch_openmeteo_input(
     ts, ps, rs = hourly_series_from_response(responses[0])
     input = WeatherInput(
         "OpenMeteo Weather",
-        Ts=var("Ts", "°C", ts, description="Air temperature within the step", axes=(WITHIN_STEP,), constraint=is_finite, resource="heat"),
+        Ts=var("Ts", "°C", ts, description="Air temperature within the step", axes=(WITHIN_STEP,), constraint=is_finite, dimension="heat"),
         Ps=var(
             "Ps",
             "kg/m^2",
@@ -87,7 +87,7 @@ def fetch_openmeteo_input(
             description="Precipitation within the step (kg/m²; 1 mm ≡ 1 kg/m²)",
             axes=(WITHIN_STEP,),
             constraint=is_non_negative + is_finite,
-            resource="water",
+            dimension="water",
         ),
         Rs=var(
             "Rs",
@@ -96,7 +96,7 @@ def fetch_openmeteo_input(
             description="Shortwave radiation within the step",
             axes=(WITHIN_STEP,),
             constraint=is_non_negative + is_finite,
-            resource="light",
+            dimension="light",
         ),
     )
     _hourly_memory[memory_key] = input
