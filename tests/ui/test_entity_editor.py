@@ -32,7 +32,7 @@ def test_entity_editor_is_the_quantity_editor_for_configuration_and_processes():
 
 
 def test_a_quantity_bounded_between_zero_and_one_reports_slider_limits():
-    sample = SliderProbeInput("probe", share=param("share", "1", 0.4, "Share of light", constraint=between_0_1_inc))
+    sample = SliderProbeInput("probe", share=param("share", "unitless", 0.4, "Share of light", constraint=between_0_1_inc))
     field = list_input_fields(sample)[0]
 
     assert field.name == "share"

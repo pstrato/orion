@@ -65,15 +65,17 @@ class Clock(State):
     @property
     def doy(self) -> Variable:
         """Day of year of the current date. 1 January is 1."""
-        return var("doy", "days", _day_of_year(_at(self)), "Day of year", is_scalar + is_non_negative)
+        return var("doy", "days", _day_of_year(self.date), "Day of year", is_scalar + is_non_negative)
 
     @property
-    def das(self) -> int:
-        return int((_at(self) - self.start.value).days)
+    def das(self) -> Variable:
+        """Days after the simulation start."""
+        return var("das", "days", jnp.asarray((_at(self) - self.start.value).days), "Days after start", is_scalar + is_non_negative)
 
     @property
-    def has(self) -> jnp.ndarray:
-        return self.step.value * self.delta.value
+    def has(self) -> Variable:
+        """Hours after the simulation start."""
+        return var("has", "hours", self.step.value * self.delta.value, "Hours after start", is_scalar + is_non_negative)
 
 
 def _at(clock: Clock) -> jdt.Datetime:
@@ -86,9 +88,9 @@ def _trunc_div(numerator: jnp.ndarray, denominator: int) -> jnp.ndarray:
     return jnp.trunc(numerator / denominator).astype(jnp.int32)
 
 
-def _day_of_year(current: jdt.Datetime) -> jnp.ndarray:
+def _day_of_year(current: Variable[JaxDate]) -> jnp.ndarray:
     """Calendar day of year from days since the Unix epoch."""
-    shifted = jnp.asarray(current.delta.days).astype(jnp.int32) + jnp.int32(719468)
+    shifted = jnp.asarray(current.value.delta.days).astype(jnp.int32) + jnp.int32(719468)
     era_days = jnp.where(shifted >= 0, shifted, shifted - jnp.int32(146096))
     era = _trunc_div(era_days, 146097)
     day_of_era = shifted - era * jnp.int32(146097)

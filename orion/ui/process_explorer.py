@@ -306,7 +306,7 @@ def _organ_lab(name: str, *, k: float, area_index: float, bottom: float, top: fl
 
     return _OrganLabInput(
         name,
-        k=param("k", "1", k, "Extinction coefficient", constraint=between_0_1_exc),
+        k=param("k", "unitless", k, "Extinction coefficient", constraint=between_0_1_exc),
         area_index=param("area_index", "m^2/m^2", area_index, "Organ area per ground area"),
         bottom=param("bottom", "m", bottom, "Height of the organ bottom"),
         top=param("top", "m", top, "Height of the organ top"),
@@ -331,7 +331,7 @@ def day_length_lab_input() -> DayLengthLabInput:
     altitude_bounds = BetweenConstraint("between 0 and 5000", lower=0.0, upper=5000.0, strict=False)
     return DayLengthLabInput(
         "day_length",
-        latitude=param("latitude", "1", 52.0, "Latitude in degrees north", constraint=latitude_bounds),
+        latitude=param("latitude", "unitless", 52.0, "Latitude in degrees north", constraint=latitude_bounds),
         altitude=param("altitude", "m", 0.0, "Altitude above sea level", constraint=altitude_bounds),
         doy=param("doy", "days", 172.0, "Day of year"),
     )
@@ -377,7 +377,7 @@ def _organ_from_lab(organ_input: _OrganLabInput) -> CanopyOrgan:
         bottom=var("bottom", "m", organ_input.bottom.value, "Organ bottom"),
         area_index=var("area_index", "m^2/m^2", organ_input.area_index.value, "Area index"),
         k=organ_input.k,
-        shape=const("shape", "1", canopy_shape(organ_input.shape, organ_input.name), "Vertical area distribution"),
+        shape=const("shape", "unitless", canopy_shape(organ_input.shape, organ_input.name), "Vertical area distribution"),
     )
 
 
@@ -397,9 +397,9 @@ def _weather_from_lab(lab: LightInterceptionLabInput) -> Weather:
     return Weather(
         name="weather",
         constraint=None,
-        Ts=var("Ts", "°C", 15.0, "Air temperature", resource="heat"),
-        Ps=var("Ps", "kg/m^2", 0.0, "Precipitation", resource="water"),
-        Rs=var("Rs", "W/m^2", radiation, "Shortwave radiation", axes=(WITHIN_STEP,), resource="light"),
+        Ts=var("Ts", "°C", 15.0, "Air temperature", dimension="heat"),
+        Ps=var("Ps", "kg/m^2", 0.0, "Precipitation", dimension="water"),
+        Rs=var("Rs", "W/m^2", radiation, "Shortwave radiation", axes=(WITHIN_STEP,), dimension="light"),
     )
 
 

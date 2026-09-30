@@ -32,9 +32,9 @@ _TO_DISPLAY: dict[tuple[str, str], float] = {
 }
 
 
-def display_class_for(unit: str, resource: str | None = None) -> str:
+def display_class_for(unit: str, dimension: str | None = None) -> str:
     """Display class for a quantity. Water stored as kg/m² uses the water setting."""
-    if resource == "water" and unit == "kg/m^2":
+    if dimension == "water" and unit == "kg/m^2":
         return "water"
     return unit
 

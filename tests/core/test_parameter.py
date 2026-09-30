@@ -16,7 +16,7 @@ from orion.core.quantity import is_non_negative
 
 def test_replacing_a_parameter_value_keeps_its_definition_and_constraint():
     layers = axis("layer")
-    original = param("k", "1", 0.5, description="Extinction", constraint=cast(Constraint[Parameter], is_non_negative), axes=(layers,))
+    original = param("k", "unitless", 0.5, description="Extinction", constraint=cast(Constraint[Parameter], is_non_negative), axes=(layers,))
     updated = original.set(jnp.array(-0.1))
 
     assert updated is not original
@@ -32,12 +32,12 @@ def test_replacing_a_parameter_value_keeps_its_definition_and_constraint():
 
 
 def test_an_omitted_parameter_value_is_zero():
-    assert float(param("k", "1").value) == pytest.approx(0.0)
-    assert param("k", "1").value.shape == ()
+    assert float(param("k", "unitless").value) == pytest.approx(0.0)
+    assert param("k", "unitless").value.shape == ()
 
 
 def test_a_parameter_value_is_replaced_when_its_pytree_leaf_changes():
-    quantity = param("k", "1", [0.4, 0.6], description="Extinction", axes=(axis("organ"),))
+    quantity = param("k", "unitless", [0.4, 0.6], description="Extinction", axes=(axis("organ"),))
     leaves, treedef = jax.tree_util.tree_flatten(quantity)
     assert len(leaves) == 1
     assert jnp.allclose(leaves[0], jnp.array([0.4, 0.6]))
@@ -45,5 +45,5 @@ def test_a_parameter_value_is_replaced_when_its_pytree_leaf_changes():
     rebuilt = jax.tree_util.tree_unflatten(treedef, [jnp.array([0.2, 0.3])])
     assert jnp.allclose(rebuilt.value, jnp.array([0.2, 0.3]))
     assert rebuilt.description == "Extinction"
-    assert rebuilt.unit == "1"
+    assert rebuilt.unit == "unitless"
     assert rebuilt.axes[0].name == "organ"

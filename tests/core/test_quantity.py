@@ -54,7 +54,7 @@ def test_a_shape_constraint_rejects_a_different_shape():
 
 
 def test_a_shape_constraint_rejects_a_value_with_no_shape():
-    quantity = const("count", "1", 3, description="count")
+    quantity = const("count", "unitless", 3, description="count")
     assert list(ShapeConstraint("shape", ()).validate((), quantity))
 
 
@@ -106,21 +106,21 @@ def test_a_non_positive_constraint_rejects_a_positive_value():
 
 def test_an_inclusive_bound_accepts_its_endpoints():
     bounds = BetweenConstraint("bounds", 0.0, 1.0)
-    assert list(bounds.validate((), var("x", "1", 0.0, description="x"))) == []
-    assert list(bounds.validate((), var("x", "1", 1.0, description="x"))) == []
+    assert list(bounds.validate((), var("x", "unitless", 0.0, description="x"))) == []
+    assert list(bounds.validate((), var("x", "unitless", 1.0, description="x"))) == []
 
 
 def test_an_inclusive_bound_rejects_values_outside_the_endpoints():
     bounds = BetweenConstraint("bounds", 0.0, 1.0)
-    assert list(bounds.validate((), var("x", "1", -0.1, description="x")))
-    assert list(bounds.validate((), var("x", "1", 1.1, description="x")))
+    assert list(bounds.validate((), var("x", "unitless", -0.1, description="x")))
+    assert list(bounds.validate((), var("x", "unitless", 1.1, description="x")))
 
 
 def test_an_exclusive_bound_rejects_its_endpoints():
     bounds = BetweenConstraint("bounds", 0.0, 1.0, strict=True)
-    assert list(bounds.validate((), var("x", "1", 0.0, description="x")))
-    assert list(bounds.validate((), var("x", "1", 1.0, description="x")))
-    assert list(bounds.validate((), var("x", "1", 0.5, description="x"))) == []
+    assert list(bounds.validate((), var("x", "unitless", 0.0, description="x")))
+    assert list(bounds.validate((), var("x", "unitless", 1.0, description="x")))
+    assert list(bounds.validate((), var("x", "unitless", 0.5, description="x"))) == []
 
 
 def test_a_lower_bound_alone_rejects_only_smaller_values():
@@ -130,7 +130,7 @@ def test_a_lower_bound_alone_rejects_only_smaller_values():
 
 
 def test_closed_and_open_unit_intervals_differ_at_the_endpoints():
-    endpoint = var("fraction", "1", 0.0, description="fraction")
+    endpoint = var("fraction", "unitless", 0.0, description="fraction")
     assert list(between_0_1_inc.validate((), endpoint)) == []
     assert list(between_0_1_exc.validate((), endpoint))
 
@@ -145,10 +145,10 @@ def test_a_finite_constraint_rejects_nan_and_infinity():
 
 
 def test_a_sum_constraint_accepts_a_total_within_tolerance():
-    parts = var("parts", "1", [0.25, 0.70], description="parts")
+    parts = var("parts", "unitless", [0.25, 0.70], description="parts")
     assert list(SumConstraint("sums to one", 1.0, tolerance=0.1).validate((), parts)) == []
 
 
 def test_a_sum_constraint_rejects_a_total_outside_tolerance():
-    parts = var("parts", "1", [0.25, 0.25], description="parts")
+    parts = var("parts", "unitless", [0.25, 0.25], description="parts")
     assert list(SumConstraint("sums to one", 1.0).validate((), parts))

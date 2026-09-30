@@ -57,6 +57,14 @@ def test_day_of_year_crosses_leap_day_and_the_new_year():
         assert int(clock.doy.value) == expected.timetuple().tm_yday
 
 
+def test_hours_after_start_is_a_quantity_of_hours():
+    clock = _clock(date(2024, 6, 21), step=2, delta=3)
+
+    assert isinstance(clock.has, Variable)
+    assert clock.has.unit == "hours"
+    assert float(clock.has.value) == 6.0
+
+
 def test_the_clock_process_advances_the_date_by_one_step():
     clock = _clock(date(2024, 1, 1))
     advanced = ClockProcess("clock").step(clock)

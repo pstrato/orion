@@ -43,8 +43,8 @@ def _organ(name: str, *, bottom: float, top: float, area_index: float, k: float,
         top=var("top", "m", top, "Organ top"),
         bottom=var("bottom", "m", bottom, "Organ bottom"),
         area_index=var("area_index", "m^2/m^2", area_index, "Area index"),
-        k=param("k", "1", k, "Extinction coefficient"),
-        shape=const("shape", "1", Rectangle(name) if shape is None else shape, "Vertical area distribution"),
+        k=param("k", "unitless", k, "Extinction coefficient"),
+        shape=const("shape", "unitless", Rectangle(name) if shape is None else shape, "Vertical area distribution"),
     )
 
 
@@ -175,7 +175,7 @@ def test_step_radiation_is_the_weather_radiation_total():
 
 
 def test_organ_built_from_its_input_uses_that_extinction_coefficient():
-    leaves = CanopyOrganInput("leaves", param("k", "1", 0.5, "Extinction coefficient"), const("shape", "1", Rectangle("rectangle"), "Uniform area profile"))
+    leaves = CanopyOrganInput("leaves", param("k", "unitless", 0.5, "Extinction coefficient"), const("shape", "unitless", Rectangle("rectangle"), "Uniform area profile"))
     organ = replace(
         canopy_organ("leaves", leaves),
         top=var("top", "m", 1.0, "Organ top"),

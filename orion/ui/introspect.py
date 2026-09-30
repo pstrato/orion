@@ -118,7 +118,7 @@ def history_series(history: Model, state_name: str, variable_name: str) -> tuple
     """Extract a 1-D time series from stepped history for plotting."""
     variable = _variable_named_in(history, state_name, variable_name)
     arr = jnp.asarray(variable.value).reshape(-1)
-    return [float(item) for item in arr.tolist()], variable.unit, variable.resource
+    return [float(item) for item in arr.tolist()], variable.unit, variable.dimension
 
 
 def history_days(history: Model, state_name: str, variable_name: str, step_hours: int) -> list[float]:

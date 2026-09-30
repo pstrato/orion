@@ -46,7 +46,7 @@ class Gain(Input):
     rate: Variable
 
     def states(self) -> Total:
-        return Total("total", None, var("amount", "1", 0.0, description="amount"))
+        return Total("total", None, var("amount", "unitless", 0.0, description="amount"))
 
 
 @entity()
@@ -56,7 +56,7 @@ class Accumulate(Process):
 
 
 def _inputs(rate: float, name: str) -> Inputs:
-    return Inputs(name, (_clock(), Gain("gain", var("rate", "1", rate, description="rate"))))
+    return Inputs(name, (_clock(), Gain("gain", var("rate", "unitless", rate, description="rate"))))
 
 
 def _processes() -> tuple[Process, ...]:
@@ -174,7 +174,7 @@ def test_simulate_all_keeps_each_inputs_own_start_date():
                     var("end", "isodate", start + timedelta(days=2), description="end"),
                     const("delta", "hours", 24, description="step"),
                 ),
-                Gain("gain", var("rate", "1", 1.0, description="rate")),
+                Gain("gain", var("rate", "unitless", 1.0, description="rate")),
             ),
         )
 
@@ -241,4 +241,4 @@ def test_simulate_all_requires_the_same_clock_horizon():
         const("delta", "hours", 24, description="step"),
     )
     with pytest.raises(ValueError, match="same clock horizon"):
-        simulate_all(_SETTINGS, (_inputs(1.0, "slow"), Inputs("short", (short, Gain("gain", var("rate", "1", 3.0, description="rate"))))), _processes())
+        simulate_all(_SETTINGS, (_inputs(1.0, "slow"), Inputs("short", (short, Gain("gain", var("rate", "unitless", 3.0, description="rate"))))), _processes())

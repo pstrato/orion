@@ -14,12 +14,11 @@ import numpy as np
 from orion.core.entity import entity
 from orion.core.input import Input
 from orion.core.process import Process
-from orion.core.quantity import is_non_negative, is_scalar
+from orion.core.quantity import Quantity, is_non_negative, is_scalar
 from orion.core.state import State
 from orion.core.variable import Variable, var
 from orion.processes.crop.canopy_organ import CanopyOrgan
 from orion.processes.crop.crop import Crop
-from orion.processes.crop.shape import Shape
 from orion.processes.weather import Weather
 
 
@@ -48,37 +47,33 @@ class LightInterceptionProcess(Process):
 _GL_XI, _GL_W = (jnp.asarray(values) for values in np.polynomial.legendre.leggauss(8))
 
 
-def beer_lambert_interception(
-    ks: jnp.ndarray,
-    area_indexes: jnp.ndarray,
-    bottoms: jnp.ndarray,
-    tops: jnp.ndarray,
-    incoming: jnp.ndarray,
-    shapes: tuple[Shape, ...],
-) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+def beer_lambert_interception(organs: tuple[CanopyOrgan, ...], incoming: Quantity) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
     """Intercept one canopy.
 
-    ``ks``, ``area_indexes``, ``bottoms`` and ``tops`` have shape ``(organ,)``.
-    ``incoming`` is a scalar. ``shapes[i]`` is that organ's profile (rectangle,
-    upward triangle, or downward triangle). Returns soil, plant, and per-organ
-    interception in organ order.
+    Light travels downward through layers bounded by every organ top and bottom.
+    Returns soil, plant, and per-organ interception in organ order.
     """
+    bottoms = _column(organs, lambda organ: organ.bottom)
+    tops = _column(organs, lambda organ: organ.top)
+    ks = _column(organs, lambda organ: organ.k)
+    incoming_value = jnp.asarray(incoming.value)
     bounds = jnp.sort(jnp.concatenate([bottoms, tops], axis=0), axis=0)
     layer_lo = jnp.flip(bounds[:-1], axis=0)
     layer_hi = jnp.flip(bounds[1:], axis=0)
     height = layer_hi - layer_lo
-    dtype = incoming.dtype
+    dtype = incoming_value.dtype
     xi = _GL_XI.astype(dtype)
     weights = _GL_W.astype(dtype)
     fraction = jnp.concatenate([(xi + 1.0) * 0.5, jnp.asarray([0.25, 0.75], dtype=dtype)])
     sample_z = layer_lo[:, None] + fraction[None, :] * height[:, None]
-    density = jnp.stack([shapes[index].density(area_indexes[index], bottoms[index], tops[index], sample_z) for index in range(len(shapes))])
+    heights = var("height", "m", sample_z, "Sample height")
+    density = jnp.stack([organ.shape.value.density(organ.area_index, organ.bottom, organ.top, heights) for organ in organs])
     extinction = jnp.sum(ks[:, None, None] * density, axis=0)
     mu_quarter, mu_three_quarter = extinction[:, -2], extinction[:, -1]
     mu_lo = (3.0 * mu_quarter - mu_three_quarter) / 2.0
     mu_hi = (3.0 * mu_three_quarter - mu_quarter) / 2.0
     tau_layer = height * (mu_lo + mu_hi) * 0.5
-    entered = incoming * jnp.exp(-(jnp.cumsum(tau_layer) - tau_layer))
+    entered = incoming_value * jnp.exp(-(jnp.cumsum(tau_layer) - tau_layer))
     t = fraction[:-2]
     depth = mu_lo[:, None] * (0.5 - t + 0.5 * jnp.square(t)) + mu_hi[:, None] * (0.5 * (1.0 - jnp.square(t)))
     light = entered[:, None] * jnp.exp(-height[:, None] * depth)
@@ -88,24 +83,13 @@ def beer_lambert_interception(
     raw_total = jnp.sum(raw, axis=0)
     share = raw * jnp.where(raw_total > 0, absorbed / jnp.where(raw_total > 0, raw_total, 1.0), 0.0)
     per_organ = jnp.sum(share, axis=1)
-    soil = incoming * jnp.exp(-jnp.sum(tau_layer))
+    soil = incoming_value * jnp.exp(-jnp.sum(tau_layer))
     plant = jnp.sum(per_organ)
     return soil, plant, per_organ
 
 
 def _column(organs: tuple[CanopyOrgan, ...], component) -> jnp.ndarray:
-    return jnp.stack([jnp.asarray(component(organ)) for organ in organs])
-
-
-def _intercept(organs: tuple[CanopyOrgan, ...], incoming: jnp.ndarray) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
-    return beer_lambert_interception(
-        _column(organs, lambda organ: organ.k.value),
-        _column(organs, lambda organ: organ.area_index.value),
-        _column(organs, lambda organ: organ.bottom.value),
-        _column(organs, lambda organ: organ.top.value),
-        incoming,
-        tuple(organ.shape.value for organ in organs),
-    )
+    return jnp.stack([jnp.asarray(component(organ).value) for organ in organs])
 
 
 def _light(name: str, value: jnp.ndarray, description: str) -> Variable:
@@ -128,7 +112,7 @@ class BeerLambertLightInterceptionProcess(LightInterceptionProcess):
 
     def step(self, crop: Crop, weather: Weather) -> tuple[LightInterception]:
         organs = crop.canopy
-        soil, plant, per_organ = _intercept(organs, weather.R.value)
+        soil, plant, per_organ = beer_lambert_interception(organs, weather.R)
         return (_outcome(organs, soil, plant, per_organ),)
 
 

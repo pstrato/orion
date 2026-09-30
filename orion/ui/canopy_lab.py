@@ -75,11 +75,13 @@ def organ_density(heights: tuple[float, ...], *, area_index: float, bottom: floa
     """Area per metre at each height, using the same shape the lab simulates."""
     import jax.numpy as jnp
 
+    from orion.core.variable import var
+
     values = canopy_shape(shape, "organ").density(
-        jnp.asarray(area_index, dtype=jnp.float32),
-        jnp.asarray(bottom, dtype=jnp.float32),
-        jnp.asarray(top, dtype=jnp.float32),
-        jnp.asarray(heights, dtype=jnp.float32),
+        var("area_index", "m^2/m^2", area_index, "Area index"),
+        var("bottom", "m", bottom, "Bottom"),
+        var("top", "m", top, "Top"),
+        var("height", "m", jnp.asarray(heights, dtype=jnp.float32), "Height"),
     )
     return [float(value) for value in jnp.reshape(values, (-1)).tolist()]
 

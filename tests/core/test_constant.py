@@ -10,7 +10,7 @@ from orion.core.constant import const
 
 
 def test_a_constant_keeps_the_given_value():
-    assert const("count", "1", 3, description="count").value == 3
+    assert const("count", "unitless", 3, description="count").value == 3
     assert const("sowing", "isodate", date(2024, 1, 1), description="sowing date").value == date(2024, 1, 1)
 
 

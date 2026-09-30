@@ -22,9 +22,9 @@ def test_precipitation_plot_is_labelled_in_millimetres():
     weather = Weather(
         name="weather",
         constraint=None,
-        Ts=var("Ts", "°C", jnp.array([15.0, 16.0]), resource="heat"),
-        Ps=var("Ps", "kg/m^2", jnp.array([1.0, 2.5]), resource="water"),
-        Rs=var("Rs", "W/m^2", jnp.zeros(2), resource="light"),
+        Ts=var("Ts", "°C", jnp.array([15.0, 16.0]), dimension="heat"),
+        Ps=var("Ps", "kg/m^2", jnp.array([1.0, 2.5]), dimension="water"),
+        Rs=var("Rs", "W/m^2", jnp.zeros(2), dimension="light"),
     )
     history = Model("history", (weather,), ())
     run = SimulationRun(name="field", color="#000", configuration=default_configuration())

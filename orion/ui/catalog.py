@@ -156,9 +156,9 @@ def _weather_input(name: str) -> Input:
     zeros = jnp.zeros((1,))
     return WeatherInput(
         name,
-        Ts=var("Ts", "°C", zeros, axes=(WITHIN_STEP,), constraint=is_finite, resource="heat"),
-        Ps=var("Ps", "kg/m^2", zeros, axes=(WITHIN_STEP,), constraint=is_non_negative + is_finite, resource="water"),
-        Rs=var("Rs", "W/m^2", zeros, axes=(WITHIN_STEP,), constraint=is_non_negative + is_finite, resource="light"),
+        Ts=var("Ts", "°C", zeros, axes=(WITHIN_STEP,), constraint=is_finite, dimension="heat"),
+        Ps=var("Ps", "kg/m^2", zeros, axes=(WITHIN_STEP,), constraint=is_non_negative + is_finite, dimension="water"),
+        Rs=var("Rs", "W/m^2", zeros, axes=(WITHIN_STEP,), constraint=is_non_negative + is_finite, dimension="light"),
     )
 
 

@@ -14,14 +14,17 @@ def day_length_hours(latitude: float, *, altitude: float = 0.0, apparent: bool =
     """Day length for each day of a 365-day year, at one latitude."""
     import jax.numpy as jnp
 
+    from orion.core.variable import var
     from orion.processes.day_length import apparent_day_length, astronomical_day_length
 
     days = jnp.arange(1, 366)
-    lat = jnp.asarray(latitude, dtype=jnp.float32)
+    latitude_q = var("latitude", "unitless", jnp.asarray(latitude, dtype=jnp.float32), "Latitude in degrees north")
+    doy = var("doy", "days", days.astype(jnp.float32), "Day of year")
     if apparent:
-        hours = apparent_day_length(lat, days.astype(jnp.float32), jnp.asarray(altitude, dtype=jnp.float32))
+        altitude_q = var("altitude", "m", jnp.asarray(altitude, dtype=jnp.float32), "Altitude above sea level")
+        hours = apparent_day_length(latitude_q, doy, altitude_q).value
     else:
-        hours = astronomical_day_length(lat, days.astype(jnp.float32))
+        hours = astronomical_day_length(latitude_q, doy).value
     return tuple((int(day), float(hour)) for day, hour in zip(days.tolist(), jnp.reshape(hours, (-1)).tolist(), strict=True))
 
 

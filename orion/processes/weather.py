@@ -7,7 +7,7 @@ from orion.core.axis import WITHIN_STEP
 from orion.core.entity import entity
 from orion.core.input import Input
 from orion.core.process import Process
-from orion.core.quantity import is_finite, is_non_negative, is_scalar
+from orion.core.quantity import Quantity, is_finite, is_non_negative, is_scalar
 from orion.core.state import State
 from orion.core.variable import Variable, var
 from orion.processes.clock import Clock, ClockInput
@@ -29,7 +29,7 @@ class WeatherInput(Input):
         return Weather(
             name="weather",
             constraint=None,
-            Ts=var("Ts", "°C", zeros, description="Air temperature within the step", axes=(WITHIN_STEP,), constraint=is_finite, resource="heat"),
+            Ts=var("Ts", "°C", zeros, description="Air temperature within the step", axes=(WITHIN_STEP,), constraint=is_finite, dimension="heat"),
             Ps=var(
                 "Ps",
                 "kg/m^2",
@@ -37,7 +37,7 @@ class WeatherInput(Input):
                 description="Precipitation within the step (kg/m²; 1 mm ≡ 1 kg/m²)",
                 axes=(WITHIN_STEP,),
                 constraint=is_non_negative + is_finite,
-                resource="water",
+                dimension="water",
             ),
             Rs=var(
                 "Rs",
@@ -46,7 +46,7 @@ class WeatherInput(Input):
                 description="Shortwave radiation within the step",
                 axes=(WITHIN_STEP,),
                 constraint=is_non_negative + is_finite,
-                resource="light",
+                dimension="light",
             ),
         )
 
@@ -64,29 +64,30 @@ class Weather(State):
 
     @property
     def Tmin(self):
-        return Variable("Minimum temperature", is_scalar, "°C", self.Ts.value.min(axis=-1), "Minimum air temperature.", (), self.Ts.resource)
+        return Variable("Minimum temperature", is_scalar, "°C", self.Ts.value.min(axis=-1), "Minimum air temperature.", (), self.Ts.dimension)
 
     @property
     def Tmax(self):
-        return Variable("Maximum temperature", is_scalar, "°C", self.Ts.value.max(axis=-1), "Maximum air temperature.", (), self.Ts.resource)
+        return Variable("Maximum temperature", is_scalar, "°C", self.Ts.value.max(axis=-1), "Maximum air temperature.", (), self.Ts.dimension)
 
-    def Tsum(self, base: float | jnp.ndarray = 0):
+    def Tsum(self, base: Quantity | None = None):
         zero = jnp.zeros(())
-        sum = jax.lax.scan(
-            lambda carry, t: (carry + jnp.maximum(t - base, zero), zero),
+        base_value = zero if base is None else jnp.asarray(base.value)
+        summed = jax.lax.scan(
+            lambda carry, t: (carry + jnp.maximum(t - base_value, zero), zero),
             zero,
             self.Ts.value,
         )[0]
 
-        return Variable("Temperature sum", is_scalar, "°C", sum, "Sum of air temperature.", (), self.Ts.resource)
+        return Variable("Temperature sum", is_scalar, "°C", summed, "Sum of air temperature.", (), self.Ts.dimension)
 
     @property
     def P(self):
-        return Variable("Precipitation", is_scalar, "kg/m^2", self.Ps.value.sum(axis=-1), "Total precipitation.", (), self.Ps.resource)
+        return Variable("Precipitation", is_scalar, "kg/m^2", self.Ps.value.sum(axis=-1), "Total precipitation.", (), self.Ps.dimension)
 
     @property
     def R(self):
-        return Variable("Radiation", is_scalar, "W/m^2", self.Rs.value.sum(axis=-1), "Total radiation.", (), self.Rs.resource)
+        return Variable("Radiation", is_scalar, "W/m^2", self.Rs.value.sum(axis=-1), "Total radiation.", (), self.Rs.dimension)
 
 
 @entity()
@@ -95,7 +96,7 @@ class WeatherProcess(Process):
 
     def step(self, clock: Clock, input: WeatherInput, weather: Weather) -> Weather:
         """Advance weather by slicing archive series for the current step."""
-        start = clock.has
+        start = clock.has.value
         delta = int(clock.delta.value)
         return Weather(
             name=weather.name,

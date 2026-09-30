@@ -25,7 +25,7 @@ class ScalarDatum:
     unit: str
     value: str
     description: str = ""
-    resource: str | None = None
+    dimension: str | None = None
 
 
 def _format_value(value: Any) -> str | None:
@@ -59,7 +59,7 @@ def apply_unit_alternatives(rows: Sequence[ScalarDatum], preferences: Mapping[st
         except ValueError:
             converted.append(row)
             continue
-        display = display_unit_for(display_class_for(row.unit, row.resource), preferences)
+        display = display_unit_for(display_class_for(row.unit, row.dimension), preferences)
         new_value, new_unit = convert_for_display(numeric, row.unit, display)
         if new_unit == row.unit and new_value == numeric:
             converted.append(row)
@@ -84,7 +84,7 @@ def _walk_scalars(prefix: str, entity: Entity) -> list[ScalarDatum]:
                 unit=quantity.unit or "",
                 value=formatted,
                 description=quantity.description or "",
-                resource=quantity.resource,
+                dimension=quantity.dimension,
             )
         )
     return rows

@@ -19,6 +19,8 @@ from orion.processes.day_length import (
     AstronomicalDayLengthProcess,
     DayLength,
     DayLengthProcess,
+    apparent_day_length,
+    astronomical_day_length,
 )
 
 
@@ -74,6 +76,22 @@ def _hours(start: date, latitude: float, step: int = 0, delta: int = 24) -> floa
     day_length = result[0]
     assert isinstance(day_length, DayLength)
     return float(day_length.hours.value)
+
+
+def test_astronomical_day_length_reads_latitude_and_day_of_year_quantities():
+    when = date(2024, 6, 21)
+    hours = astronomical_day_length(var("latitude", "unitless", 52.0, "Latitude in degrees north"), _clock(when).doy)
+
+    assert hours.unit == "hours"
+    assert float(hours.value) == pytest.approx(_fao_day_length(52.0, when.timetuple().tm_yday))
+
+
+def test_apparent_day_length_reads_the_altitude_quantity():
+    when = date(2024, 6, 21)
+    hours = apparent_day_length(var("latitude", "unitless", 52.0, "Latitude in degrees north"), _clock(when).doy, const("altitude", "m", 2000.0, "Altitude above sea level"))
+
+    assert hours.unit == "hours"
+    assert float(hours.value) == pytest.approx(_apparent_formula(52.0, when.timetuple().tm_yday, 2000.0))
 
 
 def test_equator_day_length_is_twelve_hours():

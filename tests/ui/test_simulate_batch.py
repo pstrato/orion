@@ -42,7 +42,7 @@ class Gain(Input):
     rate: Variable
 
     def states(self) -> Total:
-        return Total("total", None, var("amount", "1", 0.0, description="amount"))
+        return Total("total", None, var("amount", "unitless", 0.0, description="amount"))
 
 
 @entity()
@@ -56,7 +56,7 @@ def _processes():
 
 
 def _inputs(rate: float, name: str, *, end: date = date(2024, 1, 3)) -> Inputs:
-    return Inputs(name, (_clock(end), Gain("gain", var("rate", "1", rate, description="rate"))))
+    return Inputs(name, (_clock(end), Gain("gain", var("rate", "unitless", rate, description="rate"))))
 
 
 def _clock_step(model) -> int:

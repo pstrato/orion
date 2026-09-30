@@ -5,17 +5,17 @@ from __future__ import annotations
 from datetime import date
 
 from orion.core.constant import Constant, const
+from orion.core.dimension import Dimension
 from orion.core.entity import Entity, entity
 from orion.core.quantity import is_non_negative, is_scalar
-from orion.core.resource import Resource
 
 
 def _on(when: date) -> Constant[date]:
     return const("on", "isodate", when, description="Calendar date")
 
 
-def _mass(name: str, kilograms_per_m2: float, description: str, resource: Resource) -> Constant[float]:
-    return const(name, "kg/m^2", kilograms_per_m2, description=description, constraint=is_scalar + is_non_negative, resource=resource)
+def _mass(name: str, kilograms_per_m2: float, description: str, dimension: Dimension) -> Constant[float]:
+    return const(name, "kg/m^2", kilograms_per_m2, description=description, constraint=is_scalar + is_non_negative, dimension=dimension)
 
 
 @entity()
